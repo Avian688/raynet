@@ -1,6 +1,7 @@
 
 
 #ifdef CARTPOLE
+
 #include "CartpoleComponent.h"
 
 
@@ -130,6 +131,7 @@ void CartpoleComponent::step(ActionType action)
 
 void CartpoleComponent::cleanup(){}
 
+// Pre-step; 
 void  CartpoleComponent::decisionMade(ActionType action){
     if(this->isReset){
         //Reset state for next iterations
@@ -140,11 +142,14 @@ void  CartpoleComponent::decisionMade(ActionType action){
         step(action);
     }
 
-} // defines what to do when decision is made
+}
+
+// defines what to do when decision is made
 ObsType CartpoleComponent::getRLState(){
     return state;
 }
 
+// Return a reward for every timestep the pole has not fallen
 RewardType CartpoleComponent::getReward(){
     RewardType reward;
     if (done == false)
@@ -169,6 +174,8 @@ RewardType CartpoleComponent::getReward(){
 
     return reward;
 }
+
+// Check if the simulation is done (problem specific)
 bool CartpoleComponent::getDone(){
     bool done = false;
 
@@ -178,8 +185,15 @@ bool CartpoleComponent::getDone(){
     }
 
     return done;
-
 }
+
+
+
+
+
+
+
+// Utility functions and getters
 void CartpoleComponent::resetStepVariables(){
 
 }
@@ -195,42 +209,4 @@ void CartpoleComponent::finish(){
 
 }
 
-// void CartpoleComponent::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
-// {
-
-//     BrokerData *data = (BrokerData *)value;
-//     string b = data->getMove();
-
-//     string reset_string("reset");
-//     if (b.compare(reset_string) == 0)
-//     {
-
-//         array<double, 4> resetState = cpe->reset();
-
-//         BrokerData *return_data = new BrokerData();
-//         return_data->setMove("reset");
-//         return_data->setObs(resetState);
-
-//         emit(senderToBroker, return_data);
-//         return;
-//     }
-
-//     else if (b.compare("action") == 0)
-//     {
-//         int act = data->getAction();
-//         tuple<array<double, 4>, int, int> stepReturns = cpe->step(act);
-//         array<double, 4> stepObs = get<0>(stepReturns);
-//         int reward = get<1>(stepReturns);
-//         int done = get<2>(stepReturns);
-
-//         BrokerData *return_data = new BrokerData();
-//         return_data->setMove("action");
-//         return_data->setObs(stepObs);
-//         return_data->setDone(done);
-//         return_data->setReward(reward);
-
-//         emit(senderToBroker, return_data);
-//         return;
-//     }
-// }
 #endif

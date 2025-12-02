@@ -1,8 +1,5 @@
-
-
 #ifdef CARTPOLE
 #include "CartpoleComponent.h"
-
 
 Define_Module(CartpoleComponent);
 
@@ -194,43 +191,4 @@ RewardType CartpoleComponent::computeReward(){
 void CartpoleComponent::finish(){
 
 }
-
-// void CartpoleComponent::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
-// {
-
-//     BrokerData *data = (BrokerData *)value;
-//     string b = data->getMove();
-
-//     string reset_string("reset");
-//     if (b.compare(reset_string) == 0)
-//     {
-
-//         array<double, 4> resetState = cpe->reset();
-
-//         BrokerData *return_data = new BrokerData();
-//         return_data->setMove("reset");
-//         return_data->setObs(resetState);
-
-//         emit(senderToBroker, return_data);
-//         return;
-//     }
-
-//     else if (b.compare("action") == 0)
-//     {
-//         int act = data->getAction();
-//         tuple<array<double, 4>, int, int> stepReturns = cpe->step(act);
-//         array<double, 4> stepObs = get<0>(stepReturns);
-//         int reward = get<1>(stepReturns);
-//         int done = get<2>(stepReturns);
-
-//         BrokerData *return_data = new BrokerData();
-//         return_data->setMove("action");
-//         return_data->setObs(stepObs);
-//         return_data->setDone(done);
-//         return_data->setReward(reward);
-
-//         emit(senderToBroker, return_data);
-//         return;
-//     }
-// }
 #endif

@@ -1,4 +1,28 @@
+
+"""
+This is example cartpole script from a very old raynet commit. It could be a good example/starting place, with some caveats:
+- It is very outdated. Changes will need to be made.
+- It was designed to compare RayNet to ns3 gym, and as such it has some weird NS3 dependencies
+
+I'm going to try to to alter it until it at least *somewhat* works, if that's possible.
+At the very least I can get it close then use it as a base.
+From there, I'll develop my own training script.
+
+Notable changes I made:
+- Replace DQNConfig with AlgorithmConfig (DQN is still being used, the class structure has just changed)
+- add ../raynet/build to the PATH for access to omnetbind
+- Removed all references to ns3
+- 
+"""
+
 import sys, os
+
+# Probably overkill - add every raynet folder to the PATH
+# omnetbind is the only raynet module exposed as a python package, so this is not necessary
+# repo_path = "/home/cjuknowles/raynet"
+# for root, dirs, files in os.walk(repo_path):
+#     if "__pycache__" not in root:
+#         sys.path.append(root)
 
 # Add ~/raynet/build to the PATH, for access to omnetbind
 sys.path.append("/home/cjuknowles/raynet/build")
@@ -13,13 +37,12 @@ from ray.tune.registry import register_env
 import ray
 from ray import tune
 import random
-import math
-from ray.rllib.algorithms.dqn.dqn import DQNConfig
-from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
-import time
 
-# dumbell
-# Orca
+import math
+#from ray.rllib.algorithms.dqn.dqn import DQNConfig
+from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
+# from ns3gym import ns3env
+import time
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -28,6 +51,7 @@ class OmnetGymApiEnv(gym.Env):
         self.env_config = env_config
         self.max_episode_len = 500
 
+        # high = np.ones(50,dtype=np.float32)* np.finfo(np.float32).max
         high = np.array(
             [
                 2.4 * 2,
@@ -52,50 +76,66 @@ class OmnetGymApiEnv(gym.Env):
 
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
         obs = self.runner.reset()
-
-        obs = np.asarray(list(obs['cartpole']),dtype=np.float32)
+        print(obs)
+        obs = np.asarray(list(obs['JamesAgent']),dtype=np.float32)
         return  obs, {}
 
     def step(self, action):
-        actions = {'cartpole': action}
+        actions = {'JamesAgent': action}
         theta_threshold_radians = 12 * 2 * math.pi / 360
         x_threshold = 2.4
         obs, rewards, terminateds, info_ = self.runner.step(actions)
-        reward = round(rewards['cartpole'],4)
-        obs = obs['cartpole']
+        reward = round(rewards['JamesAgent'],4)
+        obs = obs['JamesAgent']
 
         if (obs[0] < x_threshold * -1) or (obs[0] > x_threshold) or (obs[2] < theta_threshold_radians * -1) or (obs[2] > theta_threshold_radians):
-            terminateds['cartpole'] = True
+            terminateds['JamesAgent'] = True
             reward = 0
 
-        if terminateds['cartpole']:
+        if terminateds['JamesAgent']:
              self.runner.shutdown()
              self.runner.cleanup()
        
         obs = np.asarray(list(obs),dtype=np.float32)
     
-        return  obs, reward, terminateds['cartpole'], False,{}
+        return  obs, reward, terminateds['JamesAgent'], False,{}
+        return
 
-
+from ray.rllib.algorithms.dqn.dqn import DQNConfig
+import os
 
 omnet_path = "/home/cjuknowles/raynet/build"
 
-# Returns a training environment to use for training (defines the object that step() reset() and init() are called on)
+# Called by the spawned ray process - test prints won't work here!
 def omnetgymapienv_creator(env_config):
-    return OmnetGymApiEnv(env_config) 
+    return OmnetGymApiEnv(env_config)  # return an env instance
 
+# def ns3gymapienv_creator(env_config):
+
+#     port = 5555 + env_config.worker_index
+#     simTime = 500 # seconds
+#     stepTime = 1  # seconds
+#     seed = 0 + env_config.worker_index
+#     simArgs = {"--simTime": simTime,
+#             "--testArg": 123}
+#     debug = False
+#     startSim = 1
+#     return ns3env.Ns3Env(port=port, stepTime=stepTime, startSim=startSim, simSeed=seed, simArgs=simArgs, debug=debug)  # return an env instance
+
+# register_env("ns3-v0", ns3gymapienv_creator)
+register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    register_env("OmnetGymApiEnv", omnetgymapienv_creator)
+
     env = sys.argv[1]               #CartPole-v1, OmnetGymApiEnv
     num_workers = int(sys.argv[2])  # 1
     seed = int(sys.argv[3])         # 99
     random.seed(seed)
     np.random.seed(seed)
 
-    ray.init(num_cpus=64, num_gpus=1)
+    ray.init(num_cpus=64)
 
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/dumbbell_daniel/dumbbell_daniel.ini"}
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/james/james.ini"}
     #env_config={}
 
     # This should supposedly be replaced with AlgorithmConfig, but doesn't work
@@ -105,7 +145,13 @@ if __name__ == '__main__':
         .resources(num_gpus=1)
         .environment(env, env_config=env_config) # "OmnetGymApiEnv
         .build_algo()
-    )
+    # Deprecated DQNConfig for reference
+        # DQNConfig()
+        # .rollouts(num_rollout_workers=num_workers)
+        # .resources(num_gpus=0)
+        # .environment(env, env_config=env_config) # "ns3-v0"
+        # .build()
+)
 
     # Run experiments and log progress
     t_start = time.time()
@@ -113,8 +159,13 @@ if __name__ == '__main__':
     while True:
         print(f"Total elapsed: {(now - t_start)}")
         result = algo.train()
+        # for i in range(0, 20):
+        #     print("Result object:")
+        # for i in result:
+        #     print(i, result[i])
+        #     print()
         print(result['num_env_steps_sampled_lifetime'])
-        if result['num_env_steps_sampled_lifetime'] >= 10000:
+        if result['num_env_steps_sampled_lifetime'] >= 2000:
             break
         now = time.time()
     ray.shutdown()

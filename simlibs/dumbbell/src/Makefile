@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)cartpole
 #
 # This file was generated with the command:
-#  opp_makemake -o cartpole --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
+#  opp_makemake -o cartpole --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -f
 #
 
 # Name of target to be created (-o option)
@@ -21,8 +21,8 @@ EXTRA_OBJS =
 LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src  -lRLComponents
 
 # Output directory
-PROJECT_OUTPUT_DIR = out
-PROJECTRELATIVE_PATH =
+PROJECT_OUTPUT_DIR = ../out
+PROJECTRELATIVE_PATH = src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files

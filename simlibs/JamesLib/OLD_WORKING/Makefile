@@ -1,24 +1,24 @@
 #
-# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)TcpPaced
+# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)JamesLib
 #
 # This file was generated with the command:
-#  opp_makemake -o TcpPaced --make-so -M release -f
+#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
 #
 
 # Name of target to be created (-o option)
 TARGET_DIR = .
-TARGET_NAME = $(LIB_PREFIX)TcpPaced$(D)
+TARGET_NAME = $(LIB_PREFIX)JamesLib$(D)
 TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH =
+INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS =
+LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src  -lRLComponents
 
 # Output directory
 PROJECT_OUTPUT_DIR = out
@@ -26,7 +26,7 @@ PROJECTRELATIVE_PATH =
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS =
+OBJS = $O/JamesAgent.o
 
 # Message files
 MSGFILES =
@@ -57,8 +57,11 @@ include $(CONFIGFILE)
 
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
+ifneq ($(PLATFORM),win32)
+LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src)
+endif
 
-COPTS = $(CFLAGS) $(IMPORT_DEFINES)  $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
+COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DCARTPOLE $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
 MSGCOPTS = $(INCLUDE_PATH)
 SMCOPTS =
 

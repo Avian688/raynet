@@ -1,13 +1,13 @@
 #
-# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)cartpole
+# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)james_test_lib
 #
 # This file was generated with the command:
-#  opp_makemake -o cartpole --make-so -M release -f
+#  opp_makemake -o james_test_lib --make-so -M release -f
 #
 
 # Name of target to be created (-o option)
 TARGET_DIR = .
-TARGET_NAME = $(LIB_PREFIX)cartpole$(D)
+TARGET_NAME = $(LIB_PREFIX)james_test_lib$(D)
 TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 

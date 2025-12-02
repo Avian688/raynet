@@ -3,9 +3,9 @@ import os
 
 if __name__ == "__main__":
     
-    #ENVS = ["OmnetGymApiEnv"]
-    ENVS = ["CartPole-v1"]
-    WORKERS = [1,2,4,8,16]
+    ENVS = ["OmnetGymApiEnv"]
+    #ENVS = ["CartPole-v1"]
+    WORKERS = [1]
     SEEDS =  [42]
     
     # For each parameter combo, change to the cartpole directory and run the script in a new process from there.

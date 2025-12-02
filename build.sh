@@ -41,7 +41,8 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
        esac
    done
    shift "$((OPTIND-1))"   # Discard the options and sentinel --
-   
+
+# Check for invalid build mode
 if [ "$mode" != "debug" ] && [ "$mode" != "release" ]
 then
 	echo "-m option value not recognised. Select between release and debug"
@@ -49,6 +50,7 @@ then
 	exit 1 
 	fi
 
+# Check for invalid feature
 if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ]
 then
 	echo "-f option value not recognised. Select among CARTPOLE or ORCA"
@@ -105,6 +107,10 @@ then
 	make makefilesrelease && \
 	make -j32 MODE=release
 
+	# Build JamesLib release
+	cd $RAYNET_HOME/simlibs/JamesLib && \
+	make makefilesrelease && \
+	make -j32 MODE=release
 fi
 
 cd $RAYNET_HOME

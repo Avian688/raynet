@@ -25,6 +25,4 @@ network CartpoleNet
         broker: Broker;
         cartpole: CartpoleComponent;
         stepper: Stepper;
-        
-    
 }

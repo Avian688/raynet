@@ -51,14 +51,14 @@ class OmnetGymApiEnv(gym.Env):
         self.env_config = env_config
         self.max_episode_len = 500
 
-        high = np.ones(50,dtype=np.float32)* np.finfo(np.float32).max
-        # high = np.array(
-        #     [
-        #         2.4 * 2,
-        #         np.finfo(np.float32).max,
-        #         (12 * 2 * math.pi / 360) * 2,
-        #         np.finfo(np.float32).max,],
-        #     dtype=np.float32,)
+        # high = np.ones(50,dtype=np.float32)* np.finfo(np.float32).max
+        high = np.array(
+            [
+                2.4 * 2,
+                np.finfo(np.float32).max,
+                (12 * 2 * math.pi / 360) * 2,
+                np.finfo(np.float32).max,],
+            dtype=np.float32,)
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
        
@@ -134,8 +134,8 @@ if __name__ == '__main__':
 
     ray.init(num_cpus=64)
 
-    #env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cartpole/cartpole.ini"}
-    env_config={}
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cartpole/cartpole.ini"}
+    #env_config={}
 
     # This should supposedly be replaced with AlgorithmConfig, but doesn't work
     algo = (
@@ -164,7 +164,7 @@ if __name__ == '__main__':
         #     print(i, result[i])
         #     print()
         print(result['num_env_steps_sampled_lifetime'])
-        if result['num_env_steps_sampled_lifetime'] >= 5000:
+        if result['num_env_steps_sampled_lifetime'] >= 2000:
             break
         now = time.time()
     ray.shutdown()

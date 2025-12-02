@@ -21,8 +21,8 @@ EXTRA_OBJS =
 LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src  -lRLComponents
 
 # Output directory
-PROJECT_OUTPUT_DIR = out
-PROJECTRELATIVE_PATH =
+PROJECT_OUTPUT_DIR = ../out
+PROJECTRELATIVE_PATH = src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files

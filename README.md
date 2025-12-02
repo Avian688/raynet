@@ -70,7 +70,7 @@ P.S. The command line instructions to build INET are not included in the _build.
 
 ### Step 4 - Compile binding module
 
-The binding module is build using **cmake**:
+The binding module is built using **cmake**:
 
 ```
 mkdir build
