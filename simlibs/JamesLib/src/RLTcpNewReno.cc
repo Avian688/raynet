@@ -486,6 +486,7 @@ void RLTcpNewReno::processMonitorIntervalTimer(TcpEventCode &event) {
 }
 
 void RLTcpNewReno::tick() {
+    if (!isActive)
     ASSERT(miHandler.currentMi != nullptr);
 
     // log the tick

@@ -61,8 +61,6 @@ void CartpoleComponent::handleMessage(cMessage *msg)
         std::string s("cartpole");
         this->setStringId(s);
 
-
-
         emit(this->registerSig, stringId.c_str(), simtime);
     }
     }

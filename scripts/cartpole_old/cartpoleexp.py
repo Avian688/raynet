@@ -108,11 +108,11 @@ if __name__ == '__main__':
 
     # Define the training algorithm
     algo = (
-    DQNConfig()
-    .rollouts(num_rollout_workers=num_workers)
-    .resources(num_gpus=0)
-    .environment(env, env_config=env_config) # "ns3-v0"
-    .build()
+        DQNConfig()
+        .env_runners(num_env_runners=num_workers)
+        .resources(num_gpus=1)
+        .environment(env, env_config=env_config) # "OmnetGymApiEnv
+        .build_algo()
     )
 
 # Log progress

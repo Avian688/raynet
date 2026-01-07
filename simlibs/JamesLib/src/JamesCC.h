@@ -16,53 +16,74 @@
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
 
-using namespace inet::tcp;
 using namespace omnetpp;
-using namespace std;
-namespace learning {
+using namespace inet::tcp;
+using namespace inet;
+using namespace learning;
 /**
  * TODO - Generated class
  */
  // Used to import cSimpleModule, now only imports TcpReno
-class JamesCC : public TcpNewReno, public RLInterface
+class JamesCC : public TcpNewReno
 {
-public: // General use
-    JamesCC();
-    virtual ~JamesCC();
-    double high[4];
-    ActionType action[2] = {0, 1};
-    int steps_beyond_done;
-    int steps;
-    ObsType state; // array declared
-    cMessage* initMsg; // Msg used to notify end of step
-
-    bool isRegistered;
-public: // Learning
-    ObsType random();
-    virtual void initialize();
-    void step(ActionType action);
-    virtual void handleMessage(cMessage *msg);
-    virtual void finish();
-    virtual void cleanup();
-    virtual void decisionMade(ActionType action); // defines what to do when decision is made
-    virtual ObsType  getRLState();
-    virtual RewardType getReward();
-    virtual bool getDone();
-    virtual void resetStepVariables();
-    virtual ObsType computeObservation();
-    virtual RewardType computeReward();
-    bool isConnectionPaced;
-    uint32_t maxLearnWindow;
-protected: // Signals (for results)
-  MonitorIntervalsHandler miHandler;
-  cMessage *monitorInterval;
-    simsignal_t throughputSignal;
-    simsignal_t actionSignal;
-    simsignal_t dupAcksSignal;
-    simsignal_t rttGradientSignal;
-    simsignal_t tickSignal;
-    simsignal_t miQueueSizeSignal;
-
-};
+  };
 #endif
-}
+
+
+
+
+//
+// Copyright (C) 2009 Thomas Reschka
+//
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+
+#ifndef __INET_TCPNEWRENO_H
+#define __INET_TCPNEWRENO_H
+
+#include "inet/transportlayer/tcp/flavours/TcpTahoeRenoFamily.h"
+
+namespace inet {
+namespace tcp {
+
+/**
+ * State variables for TcpNewReno.
+ */
+typedef TcpTahoeRenoFamilyStateVariables TcpNewRenoStateVariables;
+
+/**
+ * Implements TCP NewReno.
+ */
+class INET_API TcpNewReno : public TcpTahoeRenoFamily
+{
+  protected:
+    TcpNewRenoStateVariables *& state; // alias to TcpAlgorithm's 'state'
+
+    /** Create and return a TcpNewRenoStateVariables object. */
+    virtual TcpStateVariables *createStateVariables() override
+    {
+        return new TcpNewRenoStateVariables();
+    }
+
+    /** Utility function to recalculate ssthresh */
+    virtual void recalculateSlowStartThreshold();
+
+    /** Redefine what should happen on retransmission */
+    virtual void processRexmitTimer(TcpEventCode& event) override;
+
+  public:
+    /** Ctor */
+    TcpNewReno();
+
+    /** Redefine what should happen when data got acked, to add congestion window management */
+    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
+
+    /** Redefine what should happen when dupAck was received, to add congestion window management */
+    virtual void receivedDuplicateAck() override;
+};
+
+} // namespace tcp
+} // namespace inet
+
+#endif
+

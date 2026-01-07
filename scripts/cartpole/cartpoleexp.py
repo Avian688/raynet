@@ -25,7 +25,7 @@ import sys, os
 #         sys.path.append(root)
 
 # Add ~/raynet/build to the PATH, for access to omnetbind
-sys.path.append("/home/cjuknowles/raynet/build")
+# sys.path.append("/home/cjuknowles/raynet/build")
 
 #import the simulation model with cart-pole
 from build.omnetbind import OmnetGymApi
@@ -39,7 +39,7 @@ from ray import tune
 import random
 
 import math
-#from ray.rllib.algorithms.dqn.dqn import DQNConfig
+from ray.rllib.algorithms.dqn.dqn import DQNConfig
 from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
 # from ns3gym import ns3env
 import time
@@ -103,8 +103,6 @@ class OmnetGymApiEnv(gym.Env):
 from ray.rllib.algorithms.dqn.dqn import DQNConfig
 import os
 
-omnet_path = "/home/cjuknowles/raynet/build"
-
 # Called by the spawned ray process - test prints won't work here!
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
@@ -144,13 +142,14 @@ if __name__ == '__main__':
         .resources(num_gpus=1)
         .environment(env, env_config=env_config) # "OmnetGymApiEnv
         .build_algo()
+    )
     # Deprecated DQNConfig for reference
         # DQNConfig()
         # .rollouts(num_rollout_workers=num_workers)
         # .resources(num_gpus=0)
         # .environment(env, env_config=env_config) # "ns3-v0"
         # .build()
-)
+
 
     # Run experiments and log progress
     t_start = time.time()

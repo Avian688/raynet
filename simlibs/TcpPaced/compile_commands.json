@@ -46,12 +46,12 @@
       "-I/home/cjuknowles/inet4.4/src",
       "-I/home/cjuknowles/omnetpp-6.0.1/include",
       "-o",
-      "../out/clang-release/src/PacedTcp.o",
-      "PacedTcp.cc"
+      "../out/clang-release/src/PacedTcpReno.o",
+      "PacedTcpReno.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/TcpPaced/src",
-    "file": "/home/cjuknowles/raynet/simlibs/TcpPaced/src/PacedTcp.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/TcpPaced/out/clang-release/src/PacedTcp.o"
+    "file": "/home/cjuknowles/raynet/simlibs/TcpPaced/src/PacedTcpReno.cc",
+    "output": "/home/cjuknowles/raynet/simlibs/TcpPaced/out/clang-release/src/PacedTcpReno.o"
   },
   {
     "arguments": [
@@ -73,11 +73,11 @@
       "-I/home/cjuknowles/inet4.4/src",
       "-I/home/cjuknowles/omnetpp-6.0.1/include",
       "-o",
-      "../out/clang-release/src/PacedTcpReno.o",
-      "PacedTcpReno.cc"
+      "../out/clang-release/src/PacedTcp.o",
+      "PacedTcp.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/TcpPaced/src",
-    "file": "/home/cjuknowles/raynet/simlibs/TcpPaced/src/PacedTcpReno.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/TcpPaced/out/clang-release/src/PacedTcpReno.o"
+    "file": "/home/cjuknowles/raynet/simlibs/TcpPaced/src/PacedTcp.cc",
+    "output": "/home/cjuknowles/raynet/simlibs/TcpPaced/out/clang-release/src/PacedTcp.o"
   }
 ]

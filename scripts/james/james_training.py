@@ -1,41 +1,28 @@
-
 import sys, os
 from ray.runtime_env import RuntimeEnv
-
-# Probably overkill - add every raynet folder to the PATH
-# omnetbind is the only raynet module exposed as a python package, so this is not necessary
-# repo_path = "/home/cjuknowles/raynet"
-# for root, dirs, files in os.walk(repo_path):
-#     if "__pycache__" not in root:
-#         sys.path.end(root)
-
-# Add ~/raynet/build to the PATH, for access to omnetbind
-sys.path.append("/home/cjuknowles/raynet/build")
-
-#import the simulation model with cart-pole
 from build.omnetbind import OmnetGymApi
 import gymnasium as gym
-from gymnasium import spaces, logger
+from gymnasium import spaces
 import numpy as np
 import math
 from ray.tune.registry import register_env
 import ray
 from ray import tune
 import random
-
 import math
-#from ray.rllib.algorithms.dqn.dqn import DQNConfig
 from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
-# from ns3gym import ns3env
+from ray.rllib.algorithms.dqn.dqn import DQNConfig
+import os
 import time
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
+        print("\tINIT BEING CALLED")
         self.action_space = spaces.Discrete(2)
         self.runner = OmnetGymApi()
         
         self.env_config = env_config
-        self.max_episode_len = 500
+        self.max_episode_len = 5
 
         # high = np.ones(50,dtype=np.float32)* np.finfo(np.float32).max
         high = np.array(
@@ -46,107 +33,91 @@ class OmnetGymApiEnv(gym.Env):
                 np.finfo(np.float32).max,],
             dtype=np.float32,)
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
-
        
     def reset(self, *, seed=None, options=None):
+        print("\tRESET BEING CALLED")
 
         original_ini_file = self.env_config["iniPath"]
-
+        print("\tRESET BEING CALLED 1")
+        # Replace HOME with absolute paths in the simulation ini file
         with open(original_ini_file, 'r') as fin:
-            ini_string = fin.read()
-        
-        ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-
+            ini_string = fin.read().replace("HOME",  os.getenv('HOME'))
         with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
-
+        print("\tRESET BEING CALLED 2" )
+        # Start a new simulation runner on the modified ini file
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
+        print("\tRESET BEING CALLED 3")
         obs = self.runner.reset()
+        print("\tRESET BEING CALLED 4")
         print(obs)
-        obs = np.asarray(list(obs['JamesCC']),dtype=np.float32)
+        obs = np.asarray(list(obs['JamesTcpConn']),dtype=np.float32)
+        
+        print(obs)
         return  obs, {}
 
     def step(self, action):
-        actions = {'JamesCC': action}
+        print("\tSTEP BEING CALLED")
+        actions = {'JamesTcpConn': action}
         theta_threshold_radians = 12 * 2 * math.pi / 360
         x_threshold = 2.4
         obs, rewards, terminateds, info_ = self.runner.step(actions)
-        reward = round(rewards['JamesCC'],4)
-        obs = obs['JamesCC']
+        reward = round(rewards['JamesTcpConn'],4)
+        obs = obs['JamesTcpConn']
 
         if (obs[0] < x_threshold * -1) or (obs[0] > x_threshold) or (obs[2] < theta_threshold_radians * -1) or (obs[2] > theta_threshold_radians):
-            terminateds['JamesCC'] = True
+            terminateds['JamesTcpConn'] = True
             reward = 0
 
-        if terminateds['JamesCC']:
+        if terminateds['JamesTcpConn']:
              self.runner.shutdown()
              self.runner.cleanup()
        
         obs = np.asarray(list(obs),dtype=np.float32)
     
-        return  obs, reward, terminateds['JamesCC'], False,{}
-        return
+        return  obs, reward, terminateds['JamesTcpConn'], False,{}
 
-from ray.rllib.algorithms.dqn.dqn import DQNConfig
-import os
 
-omnet_path = "/home/cjuknowles/raynet/build"
-
-# Called by the spawned ray process - test prints won't work here!
+# Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
-# def ns3gymapienv_creator(env_config):
-
-#     port = 5555 + env_config.worker_index
-#     simTime = 500 # seconds
-#     stepTime = 1  # seconds
-#     seed = 0 + env_config.worker_index
-#     simArgs = {"--simTime": simTime,
-#             "--testArg": 123}
-#     debug = False
-#     startSim = 1
-#     return ns3env.Ns3Env(port=port, stepTime=stepTime, startSim=startSim, simSeed=seed, simArgs=simArgs, debug=debug)  # return an env instance
-
-# register_env("ns3-v0", ns3gymapienv_creator)
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-
-    env = sys.argv[1]               #CartPole-v1, OmnetGymApiEnv
-    num_workers = int(sys.argv[2])  # 1
-    seed = int(sys.argv[3])         # 99
+    if len(sys.argv) <= 1:
+        #raise Exception("This script expects arguments ENV, NUM_WORKERS, SEED. Please provide arguments or use a runner.py")
+        env = "OmnetGymApiEnv"
+        num_workers = 1
+        seed = 918284
+    else:
+        env = sys.argv[1]               # OmnetGymApiEnv, CartPole-v1
+        num_workers = int(sys.argv[2])  # 1, 2, 4, 8, 16
+        seed = int(sys.argv[3])         # any num
+    
     random.seed(seed)
     np.random.seed(seed)
 
     ray.init(num_cpus=64)
 
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/james/james.ini"}
-    # env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/james/james_simple.ini"}
-    # env_config = {"iniPath": os.getenv('HOME') + "/omnetpp-6.2.0/samples/james_testbed/JamesDumbbell.ini"}
-    
-    #env_config={}
-    # This should supposedly be replaced with AlgorithmConfig, but doesn't work
+
     algo = (
-        DQNConfig()
-        .env_runners(num_env_runners=num_workers)
-        .resources(num_gpus=0)
-        .environment(env, env_config=env_config) # "OmnetGymApiEnv
-        .build_algo()
-    # Deprecated DQNConfig for reference
-        # DQNConfig()
-        # .rollouts(num_rollout_workers=num_workers)
-        # .resources(num_gpus=0)
-        # .environment(env, env_config=env_config) # "ns3-v0"
-        # .build()
-)
+            DQNConfig()
+            .resources(num_gpus=1)
+            .env_runners(num_env_runners=num_workers, num_gpus_per_env_runner=1)
+            .environment(env, env_config=env_config) # "OmnetGymApiEnv
+            .build_algo()
+            )
     
     # Run experiments and log progress
     t_start = time.time()
     now = time.time()
     while True:
         print(f"Total elapsed: {(now - t_start)}")
+        print("before")
         result = algo.train()
+        print("after")
         # for i in range(0, 20):
         #     print("Result object:")
         # for i in result:

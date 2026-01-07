@@ -2,6 +2,9 @@ package JamesLib;
 
 import JamesLib.JamesNet;
 import JamesLib.JamesCC;
+import JamesLib.JamesTcp;
+import JamesLib.JamesTcpConn;
+import JamesLib.RLTcp;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networks.base.NetworkBase;
 import inet.node.inet.StandardHost;
@@ -20,6 +23,7 @@ network JamesNet
         // @statistic[packetDropped] (source = packetDropped; record = count);
         @display("bgb=800,395");
         int numberOfFlows = default(1);
+        
     types:
         channel standardLine extends DatarateChannel
         {
@@ -48,8 +52,8 @@ network JamesNet
         router2: Router {
             @display("p=300,150");
         }
-        broker: Broker{};
-		stepper: Stepper{};
+        broker: Broker;
+		stepper: Stepper;
     connections:
         // Left
         for i=0..sizeof(client)-1 {

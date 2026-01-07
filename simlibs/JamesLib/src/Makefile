@@ -28,7 +28,13 @@ PROJECTRELATIVE_PATH = src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/JamesCC.o $O/JamesNet.o $O/RLTcp.o $O/RLTcpNewReno.o $O/Txc.o
+OBJS = \
+    $O/JamesCC.o \
+    $O/JamesTcp.o \
+    $O/JamesTcpConn.o \
+    $O/RLTcp.o \
+    $O/RLTcpNewReno.o \
+    $O/Txc.o
 
 # Message files
 MSGFILES =
