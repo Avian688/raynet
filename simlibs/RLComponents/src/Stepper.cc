@@ -147,11 +147,9 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *v
 
 void Stepper::receiveSignal(cComponent *src, simsignal_t signalID, double value, cObject *obj){
     Enter_Method("change value of step size");
-    cout << "\tSTEPPER: Receieved modifyStepSize()" << endl;
     const char *signalName = getSignalName(signalID);
 
      if (strcmp(signalName, "modifyStepSize") == 0){
-        cout << "\tSTEPPER: Recognized modifyStepSize()" << endl;
         //Get id
         cString *c_id = (cString *) obj;
         std::string id = c_id->str;

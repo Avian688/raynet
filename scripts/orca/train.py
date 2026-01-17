@@ -81,7 +81,7 @@ class OmnetGymApiEnv(gym.Env):
 
         # Reset agent variables based on the reset runner
         obs = self.runner.reset() # Reset the runner itself. This is the same as the reset function this code exists in, but a layer deeper.
-        if len(obs.keys()) > 1:
+        if len(obs.keys()) > 1: # Multiple agents were found. Not supported here.
             print(f"************ ERROR: expected only 1 flow, but {len(obs.keys())} were found.") 
         self.agentId = list(obs.keys())[0]
         obs = obs[self.agentId]

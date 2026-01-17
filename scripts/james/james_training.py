@@ -18,7 +18,7 @@ from random import randint
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
-        print("\tINIT BEING CALLED")
+        #print("\tINIT BEING CALLED")
         self.action_space = spaces.Discrete(2)
         self.runner = OmnetGymApi()
         
@@ -36,39 +36,44 @@ class OmnetGymApiEnv(gym.Env):
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
        
     def reset(self, *, seed=None, options=None):
-        print("\tRESET BEING CALLED")
+        #print("\tRESET BEING CALLED")
 
         original_ini_file = self.env_config["iniPath"]
-        print("\tRESET BEING CALLED 1")
         # Replace HOME with absolute paths in the simulation ini file
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read().replace("HOME",  os.getenv('HOME'))
         with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
-        print("\tRESET BEING CALLED 2" )
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
-        print("\tRESET BEING CALLED 3")
         obs = self.runner.reset()
-        print("\tRESET BEING CALLED 4")
         print(obs)
         obs = np.asarray(list(obs['JamesCC']),dtype=np.float32)
         print(obs)
         return  obs, {}
 
     def step(self, action):
-        print("\tSTEP BEING CALLED")
         actions = {'JamesCC': action}
 
         obs, rewards, terminateds, info_ = self.runner.step(actions)
+        # print("\t\t\tSTEP: ")
+        # print("\t\t\tobs: ", obs)
+        # print("\t\t\trewards: ", rewards)
+        # print("\t\t\tterminateds: ", terminateds)
+        # print("\t\t\tinfo_: ", info_)
         if terminateds['JamesCC']:
-             self.runner.shutdown()
-             self.runner.cleanup()
+            #print ("\t\t\tJamesCC is done. Shutting down and cleaning")
+            self.runner.shutdown()
+            self.runner.cleanup()
              
         obs = obs['JamesCC']
         obs = np.asarray(list(obs),dtype=np.float32)
         reward = randint(0,1) # Reward value, random for now to see if the value actually reaches the agent
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
+        # Report this agent as being done if the sim is complete
+        if info_['simDone']:
+             dones['JamesCC'] = True
+
         return  obs, reward, terminateds['JamesCC'], False,{"test": "this is a test! Can the JamesCC see this info?"}
 
 

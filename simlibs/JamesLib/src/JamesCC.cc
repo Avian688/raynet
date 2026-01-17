@@ -13,9 +13,11 @@ JamesCC::JamesCC():
 }
 JamesCC::~JamesCC() {
     if (debug) cout << "\tJamesCC: Destructor method called. Goodbye.";
-    if (RLStep) {
-        delete cancelEvent(RLStep);
-    }
+    // if (RLStep) {
+    //     delete cancelEvent(RLStep);
+    // }
+    getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
+    getSimulation()->getSystemModule()->unsubscribe("actionResponse", (cListener*) this);
 }
 
 // CWND is the current congestion window size, dictating how many packets are allowed in-flight
@@ -45,7 +47,7 @@ void JamesCC::recalculateSlowStartThreshold()
 //    uint32_t flight_size = state->snd_max - state->snd_una;
     state->ssthresh = std::max(flight_size / 2, 2 * state->snd_mss);
 
-    conn->emit(ssthreshSignal, state->ssthresh);
+    //conn->emit(ssthreshSignal, state->ssthresh);
 }
 
 // Timeout - Reset cwnd, reduce ssthresh, enter slow start
@@ -65,7 +67,7 @@ void JamesCC::processRexmitTimer(TcpEventCode& event)
     // Enter slow start phase (lower ssthresh, reset cwnd, send first packet)
     recalculateSlowStartThreshold();    // Multiplicitive decrease (reduce ssthresh)
     state->snd_cwnd = state->snd_mss;   // Reset cwnd to 1
-    conn->emit(cwndSignal, state->snd_cwnd);
+    //conn->emit(cwndSignal, state->snd_cwnd);
     EV_INFO << "Begin Slow Start: resetting cwnd to " << state->snd_cwnd
             << ", ssthresh=" << state->ssthresh << "\n";
     state->afterRto = true;
@@ -115,7 +117,7 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 //            state->snd_cwnd = state->ssthresh;
 //            tcpEV << "Fast Recovery - Full ACK received: Exit Fast Recovery, setting cwnd to ssthresh=" << state->ssthresh << "\n";
             // TODO - If the second option (2) is selected, take measures to avoid a possible burst of data (maxburst)!
-            conn->emit(cwndSignal, state->snd_cwnd);
+            //conn->emit(cwndSignal, state->snd_cwnd);
 
             state->lossRecovery = false;
             state->firstPartialACK = false;
@@ -129,13 +131,13 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 
             // Deflate cwnd proportial to ACK'd data
             state->snd_cwnd -= state->snd_una - firstSeqAcked;      // deflate cwnd by amount of new data acknowledged by cumulative acknowledgement field
-            conn->emit(cwndSignal, state->snd_cwnd);
+            //conn->emit(cwndSignal, state->snd_cwnd);
             EV_INFO << "Fast Recovery: deflating cwnd by amount of new data acknowledged, new cwnd=" << state->snd_cwnd << "\n";
 
             // Re-inflate cwnd by 1 to make room for another retransmission
             if (state->snd_una - firstSeqAcked >= state->snd_mss) {
                 state->snd_cwnd += state->snd_mss;
-                conn->emit(cwndSignal, state->snd_cwnd);
+                //conn->emit(cwndSignal, state->snd_cwnd);
                 EV_DETAIL << "Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
             }
 
@@ -174,7 +176,7 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 //            int bytesAcked = state->snd_una - firstSeqAcked;
 //            state->snd_cwnd += bytesAcked * state->snd_mss;
 
-            conn->emit(cwndSignal, state->snd_cwnd);
+            //conn->emit(cwndSignal, state->snd_cwnd);
 
             EV_DETAIL << "cwnd=" << state->snd_cwnd << "\n";
         }
@@ -187,7 +189,7 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 
             state->snd_cwnd += incr;
 
-            conn->emit(cwndSignal, state->snd_cwnd);
+            //conn->emit(cwndSignal, state->snd_cwnd);
 
             //
             // Note: some implementations use extra additive constant mss / 8 here
@@ -259,7 +261,7 @@ void JamesCC::receivedDuplicateAck()
                 // has buffered."
                 state->snd_cwnd = state->ssthresh + 3 * state->snd_mss;
 
-                conn->emit(cwndSignal, state->snd_cwnd);
+                // conn->emit(cwndSignal, state->snd_cwnd);
 
                 EV_DETAIL << " , cwnd=" << state->snd_cwnd << ", ssthresh=" << state->ssthresh << "\n";
                 conn->retransmitOneSegment(false);
@@ -293,7 +295,7 @@ void JamesCC::receivedDuplicateAck()
             // has left the network."
             state->snd_cwnd += state->snd_mss;
 
-            conn->emit(cwndSignal, state->snd_cwnd);
+            // conn->emit(cwndSignal, state->snd_cwnd);
 
             EV_DETAIL << "NewReno on dupAcks > DUPTHRESH(=" << state->dupthresh << ": Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
 
@@ -374,8 +376,8 @@ void JamesCC::established(bool active) {
         setStringId(s);
         //setStringId(conn->getLocalAddress().str());
         this->isActive = active;
-        conn->emit(cwndSignal, state->snd_cwnd);
-        conn->emit(dupAcksSignal, dupAcks);
+        //conn->emit(cwndSignal, state->snd_cwnd);
+        //conn->emit(dupAcksSignal, dupAcks);
     }
 }
 
@@ -388,24 +390,24 @@ void JamesCC::cleanup()
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void JamesCC::decisionMade(ActionType action) {
     if (debug) cout << "\tJamesCC: decisionMade()" << endl;
-    if (!isnan(action)) {
+    if (!isnan(action) && isActive) {
 
         if (debug) cout << "\t\tAction received: " << action << endl;
         // TODO: perform some action, like setting the congestion window
         // conn->emit(actionSignal, action);
         // conn->emit(cwndSignal, state->snd_cwnd);
         if (isReset) {
-            cout << "\t\tJamesCC currently resetting, will not take action" << endl;
+            if (debug) cout << "\t\tJamesCC currently resetting, will not take action" << endl;
         } else {
             if (debug) cout << "\t\tJamesCC not resetting! Action being taken." << endl;
             //state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * maxLearnWindow * (double) state->snd_mss)));
         }
 
         RLStepsTaken++;
-        cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
+        if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
         if (RLStepsTaken >= 20) {
             if (debug) cout << "\t\tWE ARE DONE! " << RLStepsTaken << " STEPS TAKEN!" << endl;
-            //done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
+            done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
         }
     }
     else {
@@ -428,6 +430,13 @@ RewardType JamesCC::getReward(){
 }
 bool JamesCC::getDone(){
     cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "\tJamesCC: getDone()" << endl;
+    cout << "Why on earth is this not getting called ever??";
     bool done = RLStepsTaken > 100;
     if (debug) cout << "\tJamesCC: " << RLStepsTaken << " steps completed. Returning " << done << endl;
     return done;
