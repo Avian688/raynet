@@ -106,6 +106,7 @@ if __name__ == '__main__':
             .resources(num_gpus=0)
             .env_runners(num_env_runners=num_workers, num_gpus_per_env_runner=0)
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
+            .training(training_intensity=100)
             .build_algo()
             )
     
@@ -114,9 +115,7 @@ if __name__ == '__main__':
     now = time.time()
     while True:
         print(f"Total elapsed: {(now - t_start)}")
-        print("before")
         result = algo.train()
-        print("after")
         # for i in range(0, 20):
         #     print("Result object:")
         # for i in result:

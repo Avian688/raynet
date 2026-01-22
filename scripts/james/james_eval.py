@@ -41,7 +41,7 @@ def plot_by_metric(df, metric:str, path:str, figure_label:str=None, x_label:str=
     plt.close()
 
 if __name__ == '__main__':
-    results_path = "/home/cjuknowles/ray_results/DQN_OmnetGymApiEnv_2026-01-17_13-08-39s9iz6_v8/"
+    results_path = "/home/cjuknowles/ray_results/DQN_OmnetGymApiEnv_2026-01-19_10-26-05axa92eva/"
 
     df = pd.read_csv(results_path + "progress.csv")
 

@@ -1,4 +1,5 @@
 #include "JamesCC.h"
+#include "typedefs.h"
 
 
 using namespace inet::tcp;
@@ -418,14 +419,16 @@ void JamesCC::decisionMade(ActionType action) {
 
 ObsType JamesCC::getRLState(){
     if (debug) cout << "\tJamesCC: getRLState()" << endl;
-    return {0.0, 0.0, 0.0, 0.0};
-    //return state;
+    double cwnd = (double) state->snd_cwnd;
+    double ssthresh = (double) state->ssthresh;
+    double delay = state->rttvar.dbl();
+    double sent = (double) state->snd_una;
+    return {cwnd, ssthresh, delay, sent};
 }
 
 RewardType JamesCC::getReward(){
     if (debug) cout << "\tJamesCC: getReward()" << endl;
-    RewardType reward;
-    reward = 1.0;
+    RewardType reward = RewardType(state->snd_una);
     return reward;
 }
 bool JamesCC::getDone(){
