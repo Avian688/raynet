@@ -12,7 +12,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
-
+#ifdef JAMESCC
 #include "Txc.h"
 
 Define_Module(Txc);
@@ -31,3 +31,4 @@ void Txc::handleMessage(cMessage *msg)
     // just send back the message we received
     send(msg, "out");
 }
+#endif

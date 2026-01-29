@@ -91,10 +91,10 @@ class OmnetGymApiEnv(gym.Env):
         return obs, {}
 
     """
-    Progresses through a single training step
-    - self.runner is an instance of OmnetGymAPI(). It is an object responsible for a single agent.
-    - self.agentId is a unique identifier for an agent/OmnetGymAPI instance
-    - Actino is a number reprsenting how much to alter the sending rate this step (?)
+    - Recieves an action from the RL algorithm (SAC, in this case, returns an action from its policy)
+    - Tell the agent to take said action after formatting it
+    - Get observations and rewards from the agent based on the action taken
+    - Format the obs/rewards and return it...?
     """
     def step(self, action):
 
@@ -139,7 +139,7 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:
              dones[self.agentId] = True
         
-        # Return step info back up to the trainer (?)
+        # Return step info to RLlib for future use/training
         return  obs, reward, dones[self.agentId],False, {}
 
 # Funcion that returns the specified environment

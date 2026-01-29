@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #include "JamesCC.h"
 #include "typedefs.h"
 
@@ -331,7 +332,7 @@ void JamesCC::initialize() {
     setStringId(s);
     
     // Register this agent with RayNet
-    cObject* simtime = new cSimTime(1);
+    cObject* simtime = new cSimTime(.05);
     owner->emit(this->registerSig, stringId.c_str(), simtime); 
 
     // Schedule the first RL step
@@ -401,12 +402,12 @@ void JamesCC::decisionMade(ActionType action) {
             if (debug) cout << "\t\tJamesCC currently resetting, will not take action" << endl;
         } else {
             if (debug) cout << "\t\tJamesCC not resetting! Action being taken." << endl;
-            //state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * maxLearnWindow * (double) state->snd_mss)));
+            state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * (double) state->snd_mss)));
         }
 
         RLStepsTaken++;
         if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
-        if (RLStepsTaken >= 20) {
+        if (RLStepsTaken >= 1000) {
             if (debug) cout << "\t\tWE ARE DONE! " << RLStepsTaken << " STEPS TAKEN!" << endl;
             done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
         }
@@ -420,15 +421,15 @@ void JamesCC::decisionMade(ActionType action) {
 ObsType JamesCC::getRLState(){
     if (debug) cout << "\tJamesCC: getRLState()" << endl;
     double cwnd = (double) state->snd_cwnd;
-    double ssthresh = (double) state->ssthresh;
     double delay = state->rttvar.dbl();
+    double ssthresh = (double) state->ssthresh;
     double sent = (double) state->snd_una;
-    return {cwnd, ssthresh, delay, sent};
+    return {cwnd, delay, ssthresh, sent};
 }
 
 RewardType JamesCC::getReward(){
     if (debug) cout << "\tJamesCC: getReward()" << endl;
-    RewardType reward = RewardType(state->snd_una);
+    RewardType reward = RewardType(state->snd_cwnd/state->rttvar.dbl());
     return reward;
 }
 bool JamesCC::getDone(){
@@ -440,7 +441,7 @@ bool JamesCC::getDone(){
     cout << "\tJamesCC: getDone()" << endl;
     cout << "\tJamesCC: getDone()" << endl;
     cout << "Why on earth is this not getting called ever??";
-    bool done = RLStepsTaken > 100;
+    bool done = RLStepsTaken > 1000;
     if (debug) cout << "\tJamesCC: " << RLStepsTaken << " steps completed. Returning " << done << endl;
     return done;
 }
@@ -459,7 +460,7 @@ RewardType JamesCC::computeReward(){
     return getReward();
 }
 
-
+#endif
 
 
 

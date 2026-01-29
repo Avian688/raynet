@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)cartpole
 #
 # This file was generated with the command:
-#  opp_makemake -o cartpole --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
+#  opp_makemake -o cartpole --make-so -f --deep --mode release -DJAMESCC -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
 #
 
 # Name of target to be created (-o option)
@@ -63,7 +63,7 @@ ifneq ($(PLATFORM),win32)
 LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src)
 endif
 
-COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DCARTPOLE $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
+COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DJAMESCC $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
 MSGCOPTS = $(INCLUDE_PATH)
 SMCOPTS =
 

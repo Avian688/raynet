@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #include "RLTcp.h"
 
 Define_Module (RLTcp);
@@ -14,3 +15,4 @@ TcpConnection *RLTcp::createConnection(int socketId)
     module->initConnection(this, socketId);
     return module;
 }
+#endif

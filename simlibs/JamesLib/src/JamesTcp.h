@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #ifndef TRANSPORTLAYER_JAMETCP_H_
 #define TRANSPORTLAYER_JAMETCP_H_
 
@@ -18,3 +19,4 @@ protected:
 };
 
 #endif // TRANSPORTLAYER_RLTCP_H_
+#endif

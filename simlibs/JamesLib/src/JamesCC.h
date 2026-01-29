@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #ifndef __JAMES_CC_H_
 #define __JAMES_CC_H_
 
@@ -69,4 +70,5 @@ public: // General use
     bool debug = false; // Prints debug messages if true
 
   };
+#endif
 #endif

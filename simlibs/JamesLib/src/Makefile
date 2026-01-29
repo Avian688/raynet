@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)JamesLib
 #
 # This file was generated with the command:
-#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -I/home/cjuknowles/inet4.4/src -L/home/cjuknowles/inet4.4/src -lINET
+#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DJAMESCC -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -I/home/cjuknowles/inet4.4/src -L/home/cjuknowles/inet4.4/src -lINET
 #
 
 # Name of target to be created (-o option)
@@ -70,7 +70,7 @@ ifneq ($(PLATFORM),win32)
 LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/cjuknowles/inet4.4/src)
 endif
 
-COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DCARTPOLE $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
+COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DJAMESCC $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
 MSGCOPTS = $(INCLUDE_PATH)
 SMCOPTS =
 

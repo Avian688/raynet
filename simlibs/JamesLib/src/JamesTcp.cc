@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #include "JamesTcp.h"
 
 Define_Module(JamesTcp);
@@ -15,4 +16,4 @@ TcpConnection* JamesTcp::createConnection(int socketId) {
     conn->initConnection(this, socketId);
     return conn;
 }
-
+#endif

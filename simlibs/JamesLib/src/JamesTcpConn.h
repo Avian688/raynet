@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #ifndef TRANSPORTLAYER_JAMETCPCONN_H_
 #define TRANSPORTLAYER_JAMETCPCONN_H_
 
@@ -45,3 +46,4 @@ public:
 };
 
 #endif /* TRANSPORTLAYER_RLTCP_H_ */
+#endif

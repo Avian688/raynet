@@ -1,4 +1,4 @@
-
+#ifdef JAMESCC
 #include "JamesTcpConn.h"
 #include "inet/transportlayer/tcp/TcpConnection.h"
 #include "typedefs.h"
@@ -120,3 +120,4 @@ void JamesTcpConn::cleanup(){
 }
 
 // Question for self: what is the difference between computeObservation() and getRLState()? They both return the state anyway...
+#endif

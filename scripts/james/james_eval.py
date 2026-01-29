@@ -41,21 +41,16 @@ def plot_by_metric(df, metric:str, path:str, figure_label:str=None, x_label:str=
     plt.close()
 
 if __name__ == '__main__':
-    results_path = "/home/cjuknowles/ray_results/DQN_OmnetGymApiEnv_2026-01-19_10-26-05axa92eva/"
+    results_path = "/home/cjuknowles/ray_results/SAC_OmnetGymApiEnv_2026-01-28_19-54-3731293n1l/"
 
     df = pd.read_csv(results_path + "progress.csv")
 
-    plt.plot(df["training_iteration"], df["env_runners/episode_return_mean"])
-    plt.fill_between(
-        df["training_iteration"],
-        df["env_runners/episode_return_min"],
-        df["env_runners/episode_return_max"],
-        alpha=0.2
-    )
+    plt.plot(df["training_iteration"], df["env_runners/num_env_steps_sampled_lifetime_throughput"])
+
 
     plt.xlabel("Training Iteration")
-    plt.ylabel("Episode Return")
-    plt.title("Learning Curve")
+    plt.ylabel("Env Step Throughput")
+    plt.title("Training efficiency over time")
     plt.grid(True)
     plt.show()
 

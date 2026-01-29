@@ -1,4 +1,4 @@
-
+#ifdef JAMESCC
 #include "RLTcpNewReno.h"
 
 #define RTT_MULTIPLIER 1.7 // multiplier for the srtt when setting MI length
@@ -728,3 +728,4 @@ bool RLTcpNewReno::getDone()
     return 0;
 
 }
+#endif

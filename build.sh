@@ -15,7 +15,8 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
        -f FEATURE    chose the feature to build. Currently available:
                           RLRDP (default) Builds Raynet to support RDP Agents
                           CARTPOLE        Builds raynet for cartpole experimentation
-                          ORCA            Builds raynet for ORCA experimentation"
+                          ORCA            Builds raynet for ORCA experimentation
+                          JAMESCC         Build raynet for JamesCC basic congestion control examples"
 }
    
    # Initialize our own variables:
@@ -62,7 +63,7 @@ then
 	fi
 
 # Check for invalid feature
-if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ]
+if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ] && [ "$feature" != "JAMESCC" ]
 then
 	echo "-f option value not recognised. Select among CARTPOLE or ORCA"
 	echo "Build failed."	

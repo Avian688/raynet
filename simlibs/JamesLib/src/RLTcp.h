@@ -1,5 +1,5 @@
 // Written by Luca - Just a version of TCP that allows access to custom flavours (like my JamesCC)
-
+#ifdef JAMESCC
 #ifndef TRANSPORTLAYER_RLTCP_H_
 #define TRANSPORTLAYER_RLTCP_H_
 
@@ -23,3 +23,4 @@ public:
 };
 
 #endif /* TRANSPORTLAYER_RLTCP_H_ */
+#endif

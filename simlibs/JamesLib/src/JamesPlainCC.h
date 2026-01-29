@@ -1,3 +1,4 @@
+#ifdef JAMESCC
 #ifndef __JAMES_PLAIN_CC_H_
 #define __JAMES_PLAIN_CC_H_
 
@@ -27,5 +28,5 @@ class JamesPlainCC : public TcpNewReno
     // This is necessary because the usual algorithms are not visible to JamesTcpConn
 };
 #endif
-
+#endif
 
