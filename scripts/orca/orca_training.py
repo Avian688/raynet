@@ -134,8 +134,16 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
         
-        if self.step_count % 1000 == 0:
-            print(obs)
+        if self.step_count % 100 == 0:
+            print(f"100 steps completed:")
+            print(f"\tThroughput: {obs[0]:.2f}")
+            print(f"\tLoss Rate: {obs[1]:.2f}")
+            print(f"\tAvg Delay: {obs[2]:.2f}")
+            print(f"\tACK Count: {obs[3]:.2f}")
+            print(f"\tInterval Duration: {obs[4]:.2f}")
+            print(f"\tSRTT: {obs[5]:.2f}")
+            print(f"\tMax Throughput: {obs[6]:.2f}")
+            print(f"\tMin Delay: {obs[7]:.2f}")
         self.step_count += 1
         
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
@@ -151,7 +159,7 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 if __name__ == '__main__':
     #raise Exception("This script expects arguments ENV, NUM_WORKERS, SEED. Please provide arguments or use a runner.py")
     env = "OmnetGymApiEnv"
-    num_workers = 16
+    num_workers = 1
     seed = 987141
     bottleneck_bandwidth_range = (6, 192)      # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (4, 400)               # Orca: 4ms-400ms
@@ -171,9 +179,9 @@ if __name__ == '__main__':
     ray.init(num_cpus=64, num_gpus=len(gpus))
     config = (
             PPOConfig()
-            .resources(num_gpus=1)
+            .resources(num_gpus=0)
             .env_runners(num_env_runners=num_workers)
-            .learners(num_gpus_per_learner=len(gpus))
+            .learners(num_gpus_per_learner=0)
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
             .training()       
             #.build_algo()

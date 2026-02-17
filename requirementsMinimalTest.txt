@@ -7,3 +7,4 @@ torch
 lz4
 matplotlib
 pypdf
+GPUtil

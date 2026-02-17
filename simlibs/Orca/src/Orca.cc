@@ -403,9 +403,14 @@ void Orca::decisionMade(ActionType action) {
 
             // Change the current cwnd based on the action. Do not let it drop below the maximum segment size.
             //cout << "Performing action: " << action << endl;
-            //cout << "Old cwnd: " << state->snd_cwnd << endl;
-            state->snd_cwnd = max(state->snd_mss, static_cast<uint32_t>(std::pow(2.0, action) * (double) state->snd_cwnd));
-            //cout << "Action performed: " << action << endl << endl;
+            if (orcaThroughput == 0) {
+                cout << "No packets sent this interval. Skipping action." << endl;
+            } else {
+                double fakeAction = action / 1000;
+                cout << "cwnd (not) changing from " << state->snd_cwnd << " to " << static_cast<uint32_t>(std::pow(2.0, fakeAction) * (double) state->snd_cwnd) << endl;
+                state->snd_cwnd = static_cast<uint32_t>(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
+            }
+             //cout << "Action performed: " << action << endl << endl;
             //cout << "New cwnd: " << state->snd_cwnd << endl;
             this->slowstartMultiplier = action;
             this->lastStepCwnd = state->snd_cwnd;

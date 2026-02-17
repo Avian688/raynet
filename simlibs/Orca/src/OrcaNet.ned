@@ -20,7 +20,7 @@ network OrcaNet
     parameters:
         // @statistic[packetDropped] (source = packetDropped; record = count);
         @display("bgb=800,395");
-        int numberOfFlows = default(5);
+        int numberOfFlows = default(1);
         
     types:
         channel standardLine extends DatarateChannel
@@ -37,12 +37,6 @@ network OrcaNet
     submodules:
         configurator: Ipv4NetworkConfigurator {
             @display("p=0,0;is=s");
-        }
-        RLClient: StandardHost{
-        @display("p=68,71,c,70,16,150");
-        }
-        RLServer: StandardHost{
-        @display("p=68,71,c,70,14,150");
         }
         
         client[numberOfFlows]: StandardHost {
@@ -61,13 +55,11 @@ network OrcaNet
 		stepper: Stepper;
     connections:
         // Left
-        RLClient.pppg++ <--> standardLine <--> router1.pppg++;
         for i=0..sizeof(client)-1 {
             client[i].pppg++ <--> standardLine <--> router1.pppg++;
         }
 
         // Right
-        router2.pppg++ <--> standardLine <--> RLServer.pppg++;
         for n=0..sizeof(server)-1 {
             router2.pppg++ <--> standardLine <--> server[n].pppg++;
         }
