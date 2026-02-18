@@ -14,7 +14,7 @@ simple RLTcp extends Tcp
 
         bool printDebugMessages;         // used to print debug messages
         int maxRLSteps;                 // how many training steps should take place before the agent reports as done
-
+        double monitorIntervalDuration; // How many seconds a monitor interval should last
         @signal[stepData];				// step data signal
         @signal[actionQuery];			// action query signal
 }

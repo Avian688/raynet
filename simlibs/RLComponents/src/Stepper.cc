@@ -96,6 +96,17 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, const char
         delete activeAgents[id].stepMsg;
 
         activeAgents.erase(id);
+    } else if (strcmp(signalName, "modifyStepSize") == 0) {
+        //Get id
+        std::string id(value);
+        float stepSize = (float) ((cSimTime *) obj)->simtime.dbl();
+        activeAgents[id].stepSize = stepSize;
+
+        if(activeAgents[id].stepMsg->isScheduled()){
+            cancelEvent(activeAgents[id].stepMsg);
+            take(activeAgents[id].stepMsg);
+            scheduleAt(simTime() + activeAgents[id].stepSize, activeAgents[id].stepMsg);
+        }
     }
 
 }
@@ -143,27 +154,4 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *v
         EV_ERROR << "Unknown signal " << signalName << ". Expecting either brokerToStepper signal or senderToStepper signal."<< endl;
 
     }
-}
-
-void Stepper::receiveSignal(cComponent *src, simsignal_t signalID, double value, cObject *obj){
-    Enter_Method("change value of step size");
-    const char *signalName = getSignalName(signalID);
-
-     if (strcmp(signalName, "modifyStepSize") == 0){
-        //Get id
-        cString *c_id = (cString *) obj;
-        std::string id = c_id->str;
-        activeAgents[id].stepSize = float(value);
-
-        if(activeAgents[id].stepMsg->isScheduled()){
-            cancelEvent(activeAgents[id].stepMsg);
-            take(activeAgents[id].stepMsg);
-            scheduleAt(simTime() + activeAgents[id].stepSize, activeAgents[id].stepMsg);
-
-        }
-
-        delete obj;
-
-    }
-
 }

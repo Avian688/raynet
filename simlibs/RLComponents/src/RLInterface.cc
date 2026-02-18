@@ -198,4 +198,11 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
     }
 }
 
+
+
+void RLInterface::modifyStepSize(double stepSize) {
+    cObject* newStepSize = new cSimTime(stepSize);
+    owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSize); 
+}
+
 }

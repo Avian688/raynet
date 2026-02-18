@@ -50,6 +50,7 @@ public: // General use
     virtual void recalculateSlowStartThreshold() override;
     virtual void processRexmitTimer(TcpEventCode &event) override;
     virtual void established(bool active) override;
+    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
     // virtual void processTimer(cMessage *timer, TcpEventCode &event) override; // Used to intercept self-scheduled events, like the RL step
 
     // RLInterface Overrides (virtual functions that must be overridden)
@@ -78,19 +79,22 @@ public: // General use
     double orcaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
     double orcaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
     double orcaMaxThroughput=1.0; // The maximum delivery rate so far
-    double orcaMinDelay=std::numeric_limits<double>::max();      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
+    double orcaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
 
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
     double lastIntervalSentBytes = 0.0; // Whatever value state->sentBytes returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
+    uint32_t lastIntervalSndUna = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
     uint32_t bytesSentTotal = 0;
-
+    uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
     // Old - to be removed
     double lastStepCwnd=0.0; // What the CWND was at the end of the last step 
     double lastStepDelay=0.0;  // What the delay was at the end of the last stp
     double lastStepSent=0.0;    // How many packets were sent during the last step
     double lastStepSSThresh=0.0; // What was SSthresh last step
     double slowstartMultiplier=1; // The RL action: changes how quickly slow start increases CWND
+    double maxCwnd=1.0; // The max cwnd observed in an interval
+    double maxACKTotal=1.0; // The max ACK total observed in an interval
   };
 #endif
 #endif

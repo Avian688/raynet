@@ -58,7 +58,6 @@ protected:
   virtual void handleMessage(cMessage *msg);
   void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj);
   void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj);
-  void receiveSignal(cComponent *src, simsignal_t id, double value, cObject *details);
 public:
 ~Stepper();
 };

@@ -107,7 +107,11 @@ void GymApi::initialise(std::string _iniPath){
 //     return returnTuple;
 // }
 
-std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool >, std::unordered_map<std::string,bool > > GymApi::step(std::unordered_map<std::string, ActionType> actions){
+std::tuple< std::unordered_map<std::string, ObsType>,
+            std::unordered_map<std::string, RewardType>,
+            std::unordered_map<std::string,bool>,
+            std::unordered_map<std::string,bool>
+            > GymApi::step(std::unordered_map<std::string, ActionType> actions){
     
     //Create container for return tuple of step method. 
     //Contains:

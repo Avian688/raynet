@@ -38,7 +38,7 @@ class OmnetGymApiEnv(gym.Env):
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
 
         # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-2.0, high=2.0, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+        self.action_space = spaces.Box(low=-.01, high=.01, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
 
         # Define the observation space (expected values/types for each observation feature)
@@ -53,14 +53,14 @@ class OmnetGymApiEnv(gym.Env):
                       0                             # min delay
                       ]
         high_bounds = [1,                           # Throughput    (should be normalized, range from 0 to max measured throughput so far)
-                      1,                            # Lossrate
-                      1, #?                        # avg delay          (TODO: Normalize based on base_rtt)
-                      np.finfo(np.float32).max,       # number of acks    (TODO: Normalize - unsure how atm)
-                      1, #?                        # Interval duration
-                      1, #?                        # srtt               (TODO: Normalize based on base_rtt)
-                      np.finfo(np.float32).max,      # cwnd              (TODO: Normalize based on MSS and BDP)
-                      np.finfo(np.float32).max,      # max throughput    (TODO: Normalize based on link capacity)
-                      1  #?                        # min delay          (TODO: Normalize based on base_rtt)
+                      1,                            # Lossrate      NOT IMPLEMENTED YET
+                      10, #?                        # avg delay          
+                      1,                            # number of acks 
+                      1, #?                         # Interval duration
+                      1, #?                         # srtt
+                      np.finfo(np.float32).max,     # cwnd
+                      np.finfo(np.float32).max,     # max throughput    (TODO: Normalize based on link capacity)
+                      1  #?                         # min delay          (TODO: Normalize based on base_rtt)
                       ]
                       
         low_bounds = np.array(low_bounds, dtype=np.float32)
@@ -116,7 +116,7 @@ class OmnetGymApiEnv(gym.Env):
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
         obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
         #TODO: Append this to self.obs_history and return that instead. 
-        reward = round(rewards['Orca'], 4)                                 # Get the reward our RLAgent is reporting
+        reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
         sim_truncated = False
   
         # Debug stuff
@@ -134,18 +134,23 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
         
-        if self.step_count % 100 == 0:
-            print(f"100 steps completed:")
-            print(f"\tThroughput: {obs[0]:.2f}")
-            print(f"\tLoss Rate: {obs[1]:.2f}")
-            print(f"\tAvg Delay: {obs[2]:.2f}")
-            print(f"\tACK Count: {obs[3]:.2f}")
-            print(f"\tInterval Duration: {obs[4]:.2f}")
-            print(f"\tSRTT: {obs[5]:.2f}")
-            print(f"\tMax Throughput: {obs[6]:.2f}")
-            print(f"\tMin Delay: {obs[7]:.2f}")
+        printFreq = 1
+        if self.step_count % printFreq == 0:
+            print(f"\n{printFreq} step(s) completed:")
+            print("\tObservations:")
+            print(f"\t\tThroughput: {obs[0]:.2f}              \t\t(Normalized, per interval)")
+            print(f"\t\tLoss Rate: {obs[1]:.2f}               \t\t(PLACEHOLDER)")
+            print(f"\t\tAverage Delay: {obs[2]:.2f}           \t\t(Normalized, per interval)")
+            print(f"\t\tACK Count: {obs[3]:.2f}               \t\t(Normalized, per interval)")
+            print(f"\t\tInterval Duration: {obs[4]:.2f}       \t\t(Raw, per interval)")
+            print(f"\t\tSRTT: {obs[5]:.2f}                    \t\t(Normalized, current)")
+            print(f"\t\tcwnd: {obs[6]:.2f}                    \t\t(Normalized, current)")
+            print(f"\t\tMax Throughput: {obs[7]:.2f} bytes    \t(Raw, overall)")
+            print(f"\t\tMin Delay: {obs[8]:.2f} simsecs       \t\t(Raw, overall)")
+            
+            print(f"\tRewards:")
+            print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
         self.step_count += 1
-        
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         return  obs, reward, terminateds['Orca'], sim_truncated, {"test": "this is a test! Can the Orca see this info?"}
 

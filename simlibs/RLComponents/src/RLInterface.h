@@ -77,6 +77,7 @@ public:
     ~RLInterface();
     void setOwner(cComponent *_owner); // sets the owner pointer. must be called in the initialize method
     void setStringId(std::string _id);
+    void modifyStepSize(double stepSize); // Macro for easily emitting a modifyStepSize signal, which alters the time between RL steps
 
     void initialise();
     void terminate();

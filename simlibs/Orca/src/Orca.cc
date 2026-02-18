@@ -1,3 +1,6 @@
+#include "inet/transportlayer/tcp/flavours/TcpBaseAlg.h"
+#include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
+#include "omnetpp/simtime_t.h"
 #ifdef ORCA
 #include "Orca.h"
 #include "typedefs.h"
@@ -54,262 +57,23 @@ void Orca::recalculateSlowStartThreshold()
 // Timeout - Reset cwnd, reduce ssthresh, enter slow start
 void Orca::processRexmitTimer(TcpEventCode& event)
 {
-    TcpTahoeRenoFamily::processRexmitTimer(event);
-    if (event == TCP_E_ABORT)
-        return;
-
-    // Record highest seq sent. Exit loss recovery mode if currently in it (triple duplicate ACK)
-    state->recover = (state->snd_max - 1);              // highest seq# transmitted
-    EV_INFO << "recover=" << state->recover << "\n";
-    state->lossRecovery = false;
-    state->firstPartialACK = false;
-    EV_INFO << "Loss Recovery terminated.\n";
-
-    // Enter slow start phase (lower ssthresh, reset cwnd, send first packet)
-    recalculateSlowStartThreshold();    // Multiplicitive decrease (reduce ssthresh)
-    state->snd_cwnd = state->snd_mss;   // Reset cwnd to 1
-    //conn->emit(cwndSignal, state->snd_cwnd);
-    EV_INFO << "Begin Slow Start: resetting cwnd to " << state->snd_cwnd
-            << ", ssthresh=" << state->ssthresh << "\n";
-    state->afterRto = true;
-    conn->retransmitOneSegment(true);
+    TcpNewReno::processRexmitTimer(event);
 }
 
 // ACK received - increase cwnd and ssthresh
 void Orca::receivedDataAck(uint32_t firstSeqAcked)
 {
-    this->orcaACKTotal += 1.0;
-    TcpTahoeRenoFamily::receivedDataAck(firstSeqAcked);
-
-    // RFC 3782, page 5:
-    // "5) When an ACK arrives that acknowledges new data, this ACK could be
-    // the acknowledgment elicited by the retransmission from step 2, or
-    // elicited by a later retransmission.
-    //
-    // Full acknowledgements:
-    // If this ACK acknowledges all of the data up to and including
-    // "recover", then the ACK acknowledges all the intermediate
-    // segments sent between the original transmission of the lost
-    // segment and the receipt of the third duplicate ACK.  Set cwnd to
-    // either (1) min (ssthresh, FlightSize + SMSS) or (2) ssthresh,
-    // where ssthresh is the value set in step 1; this is termed
-    // "deflating" the window.  (We note that "FlightSize" in step 1
-    // referred to the amount of data outstanding in step 1, when Fast
-    // Recovery was entered, while "FlightSize" in step 5 refers to the
-    // amount of data outstanding in step 5, when Fast Recovery is
-    // exited.)  If the second option is selected, the implementation is
-    // encouraged to take measures to avoid a possible burst of data, in
-    // case the amount of data outstanding in the network is much less
-    // than the new congestion window allows.  A simple mechanism is to
-    // limit the number of data packets that can be sent in response to
-    // a single acknowledgement; this is known as "maxburst_" in the NS
-    // simulator.  Exit the Fast Recovery procedure."
-
-    // In loss recovery: Check if the ACK'd segment is full (ACK's all missing segments) or partial (there are stil packets missing)
-    if (state->lossRecovery) {
-        // Full ACK - Missing packets have arrived, fully deflate cwnd to normal levels and resume normal operation
-        if (seqGE(state->snd_una - 1, state->recover)) {
-            // Exit Fast Recovery: deflating cwnd
-            //
-            // option (1): set cwnd to min (ssthresh, FlightSize + SMSS)
-            uint32_t flight_size = state->snd_max - state->snd_una;
-            state->snd_cwnd = std::min(state->ssthresh, flight_size + state->snd_mss);
-            EV_INFO << "Fast Recovery - Full ACK received: Exit Fast Recovery, setting cwnd to " << state->snd_cwnd << "\n";
-            // option (2): set cwnd to ssthresh
-//            state->snd_cwnd = state->ssthresh;
-//            tcpEV << "Fast Recovery - Full ACK received: Exit Fast Recovery, setting cwnd to ssthresh=" << state->ssthresh << "\n";
-            // TODO - If the second option (2) is selected, take measures to avoid a possible burst of data (maxburst)!
-            //conn->emit(cwndSignal, state->snd_cwnd);
-
-            state->lossRecovery = false;
-            state->firstPartialACK = false;
-            EV_INFO << "Loss Recovery terminated.\n";
-        }
-        // Partial ACK - More packets are missing. Retransmit the next missing segment, and partially deflate cwnd to account for the ACK'd segment
-        else {
-            // Retransmit first next missing segment
-            EV_INFO << "Fast Recovery - Partial ACK received: retransmitting the first unacknowledged segment\n";         
-            conn->retransmitOneSegment(false);        // retransmit first unacknowledged segment
-
-            // Deflate cwnd proportial to ACK'd data
-            state->snd_cwnd -= state->snd_una - firstSeqAcked;      // deflate cwnd by amount of new data acknowledged by cumulative acknowledgement field
-            //conn->emit(cwndSignal, state->snd_cwnd);
-            EV_INFO << "Fast Recovery: deflating cwnd by amount of new data acknowledged, new cwnd=" << state->snd_cwnd << "\n";
-
-            // Re-inflate cwnd by 1 to make room for another retransmission
-            if (state->snd_una - firstSeqAcked >= state->snd_mss) {
-                state->snd_cwnd += state->snd_mss;
-                //conn->emit(cwndSignal, state->snd_cwnd);
-                EV_DETAIL << "Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
-            }
-
-            // try to send a new segment if permitted by the new value of cwnd
-            sendData(false);
-
-            // reset REXMIT timer for the first partial ACK that arrives during Fast Recovery
-            if (state->lossRecovery) {
-                if (!state->firstPartialACK) {
-                    state->firstPartialACK = true;
-                    EV_DETAIL << "First partial ACK arrived during recovery, restarting REXMIT timer.\n";
-                    restartRexmitTimer();
-                }
-            }
-        }
-    }
-    else {
-        //
-        // Perform slow start and congestion avoidance.
-        //
-        if (state->snd_cwnd < state->ssthresh) {
-            EV_DETAIL << "cwnd <= ssthresh: Slow Start: increasing cwnd by SMSS bytes to ";
-
-            // perform Slow Start. RFC 2581: "During slow start, a TCP increments cwnd
-            // by at most SMSS bytes for each ACK received that acknowledges new data."
-            state->snd_cwnd += state->snd_mss;
-            // state->snd_cwnd += (uint32_t) (this->slowstartMultiplier * (double) state->snd_mss); // Raynet; multiply the slow start increase by the trained value slowstartMultiplier
-
-            // Note: we could increase cwnd based on the number of bytes being
-            // acknowledged by each arriving ACK, rather than by the number of ACKs
-            // that arrive. This is called "Appropriate Byte Counting" (ABC) and is
-            // described in RFC 3465. This RFC is experimental and probably not
-            // implemented in real-life TCPs, hence it's commented out. Also, the ABC
-            // RFC would require other modifications as well in addition to the
-            // two lines below.
-            //
-//            int bytesAcked = state->snd_una - firstSeqAcked;
-//            state->snd_cwnd += bytesAcked * state->snd_mss;
-
-            //conn->emit(cwndSignal, state->snd_cwnd);
-
-            EV_DETAIL << "cwnd=" << state->snd_cwnd << "\n";
-        }
-        else {
-            // perform Congestion Avoidance (RFC 2581)
-            uint32_t incr = state->snd_mss * state->snd_mss / state->snd_cwnd;
-
-            if (incr == 0)
-                incr = 1;
-
-            state->snd_cwnd += incr;
-
-            //conn->emit(cwndSignal, state->snd_cwnd);
-
-            //
-            // Note: some implementations use extra additive constant mss / 8 here
-            // which is known to be incorrect (RFC 2581 p5)
-            //
-            // Note 2: RFC 3465 (experimental) "Appropriate Byte Counting" (ABC)
-            // would require maintaining a bytes_acked variable here which we don't do
-            //
-
-            EV_DETAIL << "cwnd > ssthresh: Congestion Avoidance: increasing cwnd linearly, to " << state->snd_cwnd << "\n";
-        }
-
-        // RFC 3782, page 13:
-        // "When not in Fast Recovery, the value of the state variable "recover"
-        // should be pulled along with the value of the state variable for
-        // acknowledgments (typically, "snd_una") so that, when large amounts of
-        // data have been sent and acked, the sequence space does not wrap and
-        // falsely indicate that Fast Recovery should not be entered (Section 3,
-        // step 1, last paragraph)."
-        state->recover = (state->snd_una - 2);
-    }
-
-    sendData(false);
-    // Data has been sent. Peform an RL step.
-    
+    TcpNewReno::receivedDataAck(firstSeqAcked);
+    // // TODO: update the average RTT here
+    // simtime_t segmentRTT = this->rtt;
+    // this->orcaDelay = (this->orcaDelay * this->orcaACKTotal + segmentRTT.dbl()) / (this->orcaACKTotal + 1);
+    // this->orcaACKTotal += 1;
 }
 
 // Duplicate ACK received - attempt a fast restransmit
 void Orca::receivedDuplicateAck()
 {
-    TcpTahoeRenoFamily::receivedDuplicateAck();
-
-    if (state->dupacks == state->dupthresh) {
-        if (!state->lossRecovery) {
-            // RFC 3782, page 4:
-            // "1) Three duplicate ACKs:
-            // When the third duplicate ACK is received and the sender is not
-            // already in the Fast Recovery procedure, check to see if the
-            // Cumulative Acknowledgement field covers more than "recover".  If
-            // so, go to Step 1A.  Otherwise, go to Step 1B."
-            //
-            // RFC 3782, page 6:
-            // "Step 1 specifies a check that the Cumulative Acknowledgement field
-            // covers more than "recover".  Because the acknowledgement field
-            // contains the sequence number that the sender next expects to receive,
-            // the acknowledgement "ack_number" covers more than "recover" when:
-            //      ack_number - 1 > recover;"
-            if (state->snd_una - 1 > state->recover) {
-                EV_INFO << "NewReno on dupAcks == DUPTHRESH(=" << state->dupthresh << ": perform Fast Retransmit, and enter Fast Recovery:";
-
-                // RFC 3782, page 4:
-                // "1A) Invoking Fast Retransmit:
-                // If so, then set ssthresh to no more than the value given in
-                // equation 1 below.  (This is equation 3 from [RFC2581]).
-                //      ssthresh = max (FlightSize / 2, 2*SMSS)           (1)
-                // In addition, record the highest sequence number transmitted in
-                // the variable "recover", and go to Step 2."
-                recalculateSlowStartThreshold();
-                state->recover = (state->snd_max - 1);
-                state->firstPartialACK = false;
-                state->lossRecovery = true;
-                EV_INFO << " set recover=" << state->recover;
-
-                // RFC 3782, page 4:
-                // "2) Entering Fast Retransmit:
-                // Retransmit the lost segment and set cwnd to ssthresh plus 3 * SMSS.
-                // This artificially "inflates" the congestion window by the number
-                // of segments (three) that have left the network and the receiver
-                // has buffered."
-                state->snd_cwnd = state->ssthresh + 3 * state->snd_mss;
-
-                // conn->emit(cwndSignal, state->snd_cwnd);
-
-                EV_DETAIL << " , cwnd=" << state->snd_cwnd << ", ssthresh=" << state->ssthresh << "\n";
-                conn->retransmitOneSegment(false);
-
-                // RFC 3782, page 5:
-                // "4) Fast Recovery, continued:
-                // Transmit a segment, if allowed by the new value of cwnd and the
-                // receiver's advertised window."
-                sendData(false);
-            }
-            else {
-                EV_INFO << "NewReno on dupAcks == DUPTHRESH(=" << state->dupthresh << ": not invoking Fast Retransmit and Fast Recovery\n";
-
-                // RFC 3782, page 4:
-                // "1B) Not invoking Fast Retransmit:
-                // Do not enter the Fast Retransmit and Fast Recovery procedure.  In
-                // particular, do not change ssthresh, do not go to Step 2 to
-                // retransmit the "lost" segment, and do not execute Step 3 upon
-                // subsequent duplicate ACKs."
-            }
-        }
-        EV_INFO << "NewReno on dupAcks == DUPTHRESH(=" << state->dupthresh << ": TCP is already in Fast Recovery procedure\n";
-    }
-    else if (state->dupacks > state->dupthresh) {
-        if (state->lossRecovery) {
-            // RFC 3782, page 4:
-            // "3) Fast Recovery:
-            // For each additional duplicate ACK received while in Fast
-            // Recovery, increment cwnd by SMSS.  This artificially inflates the
-            // congestion window in order to reflect the additional segment that
-            // has left the network."
-            state->snd_cwnd += state->snd_mss;
-
-            // conn->emit(cwndSignal, state->snd_cwnd);
-
-            EV_DETAIL << "NewReno on dupAcks > DUPTHRESH(=" << state->dupthresh << ": Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
-
-            // RFC 3782, page 5:
-            // "4) Fast Recovery, continued:
-            // Transmit a segment, if allowed by the new value of cwnd and the
-            // receiver's advertised window."
-            sendData(false);
-        }
-    }
-
+    TcpNewReno::receivedDuplicateAck();
 }
 
 // bool Orca::sendData(bool sendCommandInvoked) {
@@ -324,17 +88,29 @@ void Orca::receivedDuplicateAck()
 //     return b;
 // }
 
+// Called upon a valid ACK received (?); Grab the RTT measured and use it to update the current interval's average (may be faster to store all values and average at the end of the interval)
+void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
+    TcpNewReno::rttMeasurementComplete(tSent, tAcked);
+    double packetRTT = (tAcked-tSent).dbl();
+    this->orcaDelay = (this->orcaDelay * (double) rttReportCount + packetRTT) / (rttReportCount + 1);
+    this->rttReportCount += 1;
+}
+
+
+
+
 // // RayNet: Called to initalize the agent
 void Orca::initialize() {
     if (debug) cout << "\tOrca initialize()" << endl;
     int _stateSize = this->conn->getTcpMain()->par("stateSize");;
     int _maxObsCount = this->conn->getTcpMain()->par("maxObsCount");
+    
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
     debug = this->conn->getTcpMain()->par("printDebugMessages");
 
     // provide the RLInterface with a cComponent API (to use signaling functionality)
     setOwner((cComponent*) conn->getTcpMain());
-
+    
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
     RLInterface::initialise();
@@ -345,7 +121,7 @@ void Orca::initialize() {
     setStringId(s);
     
     // Register this agent with RayNet
-    cObject* simtime = new cSimTime(.05);
+    cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
     owner->emit(this->registerSig, stringId.c_str(), simtime); 
 
     // Schedule the first RL step
@@ -384,49 +160,93 @@ void Orca::established(bool active) {
     }
 }
 
+
+
+
+
+
+
+// Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
+ObsType Orca::computeObservation(){
+    if (debug) cout << "\tOrca: computeObservation()" << endl; 
+    
+    this->orcaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
+    this->orcaThroughput = (state->snd_max - this->lastIntervalSentBytes) / this->orcaIntervalDuration;
+    this->orcaLossRate=0.0;             // Track total sent and total lost. Perform final division here.
+    this->orcaACKTotal= state->snd_una - this->lastIntervalSndUna;  // Check how many ACK's occured this interval (see how many packets snd_una has increased by)
+    this->orcaSRTT = state->srtt.dbl();
+    this->orcaCwnd = (double) state->snd_cwnd;
+    this->orcaMaxThroughput = std::max(this->orcaMaxThroughput, this->orcaThroughput);
+    if (this->rttReportCount > 0) {
+        // Only update the minDelay if an ACK has been receieved this interval.
+        // This is done to prevent division by zero.
+        // At some point I need to implement skipping if this happens.
+        this->orcaMinDelay = std::min(this->orcaMinDelay, this->orcaDelay);
+    }
+    cout << "RTT Report count:" << this->rttReportCount << endl;
+    this->maxCwnd = std::max(this->maxCwnd, this->orcaCwnd);
+    this->maxACKTotal = std::max(this->maxACKTotal, this->orcaACKTotal);
+
+    // Should I update these in resetStepVariables? How much later is that called?
+    this->lastIntervalSndUna = state->snd_una;
+    this->lastIntervalSentBytes = state->snd_max;
+    this->lastIntervalTime = simTime();
+    return {this->orcaThroughput / this->orcaMaxThroughput,
+            this->orcaLossRate, // not implemented yet
+            this->orcaDelay / this->orcaMinDelay,
+            this->orcaACKTotal / this->maxACKTotal, 
+            this->orcaIntervalDuration, 
+            this->orcaSRTT / this->orcaMinDelay, 
+            this->orcaCwnd / this->maxCwnd,
+            this->orcaMaxThroughput, 
+            this->orcaMinDelay
+        };
+}
+
+RewardType Orca::computeReward(){
+    if (debug) cout << "\tOrca: computeReward()" << endl;
+
+    // Do not compute a reward if no ACKs were received. No ACKs means no throughput, no valid RTT measurement, etc.
+    if (this->rttReportCount == 0) {
+        return RewardType(0.0);
+    }
+    
+    double maxPossiblePower = (this->orcaMaxThroughput/this->orcaMinDelay);
+    double currentPower = this->orcaThroughput / this->orcaDelay; // TODO: clamp the delay to minDelay if it is within some threshold (minDelay*beta)
+    double normalizedPower = currentPower / maxPossiblePower;
+
+    return RewardType(normalizedPower);
+}
+
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Orca::decisionMade(ActionType action) {
     if (debug) cout << "\tOrca: decisionMade()" << endl;
-    //cout << "Action recieved!: " << action << endl;
-    if (!isnan(action) && isActive) {
 
+    if (!isnan(action) && isActive) {
         if (debug) cout << "\t\tAction received: " << action << endl;
-        // TODO: perform some action, like setting the congestion window
-        // conn->emit(actionSignal, action);
-        // conn->emit(cwndSignal, state->snd_cwnd);
+
         if (isReset) {
             if (debug) cout << "\t\tOrca currently resetting, will not take action" << endl;
         } else {
-            if (debug) cout << "\t\tOrca not resetting! Action being taken." << endl;
-            // cout << "Old cwnd: " << state->snd_cwnd << endl;
-            // state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * (double) state->snd_mss)));
-
             // Change the current cwnd based on the action. Do not let it drop below the maximum segment size.
-            //cout << "Performing action: " << action << endl;
-            if (orcaThroughput == 0) {
-                cout << "No packets sent this interval. Skipping action." << endl;
+            if (this->orcaACKTotal == 0) {
+                cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
             } else {
-                double fakeAction = action / 1000;
-                cout << "cwnd (not) changing from " << state->snd_cwnd << " to " << static_cast<uint32_t>(std::pow(2.0, fakeAction) * (double) state->snd_cwnd) << endl;
-                state->snd_cwnd = static_cast<uint32_t>(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
-            }
-             //cout << "Action performed: " << action << endl << endl;
-            //cout << "New cwnd: " << state->snd_cwnd << endl;
-            this->slowstartMultiplier = action;
-            this->lastStepCwnd = state->snd_cwnd;
-            // Maybe call recalculateSlowStart() here? or let it happen organically
+                double fakeAction = action;
+                uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
+                newCwnd =  max(state->snd_mss, newCwnd);
+                cout << "\tAction:" << endl;
+                cout << "\t\tcwnd changing from " << state->snd_cwnd << " to " << newCwnd << endl;
+                state->snd_cwnd = newCwnd;
 
-            //state->snd_cwnd = static_cast<uint32_t> ((double) state->snd_cwnd * (double) action);
-            // uint32_t testCwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action *  (double) state->snd_cwnd)));
-            // cout << "new cwnd: " << state->snd_cwnd << endl;
-            
-            // state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action *  (double) state->snd_cwnd)));
-            // cout << "set cwnd: " << testCwnd << endl<<endl;
-            // Update lastStep values
-            // this->lastStepCwnd = (double) state->snd_cwnd;        // What the CWND was at the end of the last step 
-            // this->lastStepDelay = state->rttvar.dbl();            // What the delay was at the end of the last stp
-            // this->lastStepSSThresh = (double) state->ssthresh;    // What was SSthresh last step
-            // this->lastStepSent = (double) state->snd_una;         // What was sent last step
+                // Change the stepSize to be 1 RTT (based on srtt)
+                // cObject* newStepSizeObj = new cSimTime(state->srtt.dbl());
+                // cout << "\t\tChanging step size to " << newStepSizeObj << endl;
+                
+                // owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSizeObj); 
+
+                this->modifyStepSize(state->srtt.dbl());
+            }
         }
 
         RLStepsTaken++;
@@ -442,82 +262,16 @@ void Orca::decisionMade(ActionType action) {
 }
 
 
-
-
-// Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
-ObsType Orca::computeObservation(){
-    if (debug) cout << "\tOrca: computeObservation()" << endl; 
-    // throughput
-    // loss rate
-    // delay
-    // acks
-    // intervalDuration
-    // srtt
-    // cwnd
-    // throughput_max
-    // delay_min
-
-    // Current values
-    double cwnd = (double) state->snd_cwnd;
-    double delay = state->rttvar.dbl();
-    double ssthresh = (double) state->ssthresh;
-    double sent = (double) state->snd_una;
-
-    // // How values changed
-    double cwndChange = cwnd - this->lastStepCwnd;
-    // double delayChange = delay - this->lastStepDelay;
-    // double ssthreshChange = ssthresh - this->lastStepSSThresh;
-
-     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
-    
-
-    double bytesSentThisInterval = state->snd_max - this->lastIntervalSentBytes;
-    // The plan - remove the comments as you complete them
-    this->orcaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
-    this->orcaThroughput = bytesSentThisInterval / this->orcaIntervalDuration;
-    this->orcaLossRate=0.0;             // Track total sent and total lost. Perform final division here.
-    this->orcaDelay=0.0;                // Track rolling average over time (requires tracking both the avg itself, and num packet sent)
-    // this->orcaACKTotal=this->orcaACKTotal; // nothing needed here. This variable is updated over time.
-    this->orcaSRTT = state->srtt.dbl();
-    this->orcaCwnd = (double) state->snd_cwnd;
-    this->orcaMaxThroughput = std::max(this->orcaMaxThroughput, this->orcaThroughput);
-    this->orcaMinDelay = std::min(this->orcaMinDelay, this->orcaDelay);
-
-    // Should I update these in resetStepVariables? How much later is that called?
-    this->lastIntervalSentBytes = state->snd_max;
-    this->lastIntervalTime = simTime();
-    return {this->orcaThroughput / this->orcaMaxThroughput, // Normalized throughput, 0.0 to 1.0
-            this->orcaLossRate, 
-            this->orcaDelay,
-            this->orcaACKTotal, 
-            this->orcaIntervalDuration, 
-            this->orcaSRTT, 
-            this->orcaCwnd,
-            this->orcaMaxThroughput, 
-            this->orcaMinDelay
-        };
-}
-RewardType Orca::computeReward(){
-    if (debug) cout << "\tOrca: computeReward()" << endl;
-    double sent = (double) state->snd_una;
-    double sentThisStep = sent - this->lastStepSent;
-    
-    // RewardType reward = RewardType(sentThisStep);
-    // this->lastStepSent = sent;
-    // RewardType reward = RewardType(state->snd_cwnd/state->rttvar.dbl());
-    double power = (this->orcaThroughput/1000000000) / state->srtt.dbl();
-    RewardType reward = RewardType(power);
-    return reward;
-}
-
 void Orca::resetStepVariables()
 {
-    if (debug) cout << "\tOrca: resetStepVariables()" << endl;
+    cout << "\t\tOrca: resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     this->orcaDelay=0.0;         // The average delay of packets over the last interval
     this->orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     this->orcaIntervalDuration=0.0;  // The simtime elapsed over the last interval
+
+    this->rttReportCount=0; // The number of RTT values we have measured over the last interval
 }
 
 // Returns true if the agent is reporting this episode as complete. (Pretty sure this is never called. Just set done to true directly during an RLStep.)
