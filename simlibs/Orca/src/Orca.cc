@@ -4,7 +4,8 @@
 #ifdef ORCA
 #include "Orca.h"
 #include "typedefs.h"
-
+#include <inet/common/INETDefs.h>
+#include "inet/common/InitStages.h"
 
 using namespace inet::tcp;
 using namespace inet;
@@ -183,7 +184,6 @@ ObsType Orca::computeObservation(){
         // At some point I need to implement skipping if this happens.
         this->orcaMinDelay = std::min(this->orcaMinDelay, this->orcaDelay);
     }
-    cout << "RTT Report count:" << this->rttReportCount << endl;
     this->maxCwnd = std::max(this->maxCwnd, this->orcaCwnd);
     this->maxACKTotal = std::max(this->maxACKTotal, this->orcaACKTotal);
 
@@ -230,13 +230,13 @@ void Orca::decisionMade(ActionType action) {
         } else {
             // Change the current cwnd based on the action. Do not let it drop below the maximum segment size.
             if (this->orcaACKTotal == 0) {
-                cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
+                if (debug) cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
             } else {
                 double fakeAction = action;
                 uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
                 newCwnd =  max(state->snd_mss, newCwnd);
-                cout << "\tAction:" << endl;
-                cout << "\t\tcwnd changing from " << state->snd_cwnd << " to " << newCwnd << endl;
+                if (debug) cout << "\tAction:" << endl;
+                if (debug) cout << "\t\tcwnd changing from " << state->snd_cwnd << " to " << newCwnd << endl;
                 state->snd_cwnd = newCwnd;
 
                 // Change the stepSize to be 1 RTT (based on srtt)
@@ -264,7 +264,7 @@ void Orca::decisionMade(ActionType action) {
 
 void Orca::resetStepVariables()
 {
-    cout << "\t\tOrca: resetStepVariables()" << endl;
+    if (debug) cout << "\t\tOrca: resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     this->orcaDelay=0.0;         // The average delay of packets over the last interval
@@ -276,7 +276,7 @@ void Orca::resetStepVariables()
 
 // Returns true if the agent is reporting this episode as complete. (Pretty sure this is never called. Just set done to true directly during an RLStep.)
 bool Orca::getDone() {
-    cout << "Orca getDone(): If you're seeing this, getDone() probably isn't deprecated.";
+    if (debug) cout << "Orca getDone(): If you're seeing this, getDone() probably isn't deprecated.";
     bool done = RLStepsTaken > 1000;
     if (debug) cout << "\tOrca: " << RLStepsTaken << " steps completed. Returning " << done << endl;
     return done;

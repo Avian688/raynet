@@ -9,19 +9,18 @@ using namespace std;
 using namespace omnetpp;
 
 int main(int argc, char **argv){
-
     std::string HOME(getenv("HOME"));
-    // std::string NEDPATH = "NEDPATH="+HOME + "/raynet/simulations;"+HOME+"/raynet/simlibs/RLComponents/src;"+HOME+"/raynet/simlibs/ecmp/src;"+HOME+"/raynet/simlibs/TcpPaced/src;"+HOME+"/raynet/simlibs/RLCC/src;"+HOME+"/raynet/simlibs/rdp/src;"+HOME+"/inet4.4/src/inet;"+HOME+"/inet4.4/examples";
-
-    // putenv(NEDPATH.c_str());
+    std::string NEDPATH = "NEDPATH="+HOME + "/raynet/simulations;"+HOME+"/raynet/simlibs/RLComponents/src;"+HOME+"/raynet/simlibs/ecmp/src;"+HOME+"/raynet/simlibs/TcpPaced/src;"+HOME+"/raynet/simlibs/RLCC/src;"+HOME+"/raynet/simlibs/rdp/src;"+HOME+"/inet4.5/src/inet;"+HOME+"/inet4.5/examples";
+    cout << "Home: " << HOME << endl;
+    //putenv(NEDPATH.c_str());
     setenv("NEDPATH", (HOME + "/raynet/simulations;" +
                    HOME + "/raynet/simlibs/RLComponents/src;" +
                    HOME + "/raynet/simlibs/ecmp/src;" +
                    HOME + "/raynet/simlibs/TcpPaced/src;" +
                    HOME + "/raynet/simlibs/RLCC/src;" +
                    HOME + "/raynet/simlibs/rdp/src;" +
-                   HOME + "/inet4.4/src/inet;" +
-                   HOME + "/inet4.4/examples")
+                   HOME + "/inet4.5/src/inet;" +
+                   HOME + "/inet4.5/examples")
                    .c_str(), 1);
 
     // TODO: Initialise CmdRllibenv. This class will be bound to Python.
@@ -29,7 +28,7 @@ int main(int argc, char **argv){
     std::string _iniPath;
     ObsType  obs;
 
-    _iniPath = (string(getenv("HOME"))+string("/raynet/configs/orca/orcaConfigStatic_debug.ini")).c_str();
+    _iniPath = (string(getenv("HOME"))+string("/raynet/configs/orca/orca.ini")).c_str();
 
     GymApi* gymapi = new GymApi();
    

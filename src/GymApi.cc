@@ -24,6 +24,7 @@ void GymApi::cleanupmemory(){
 }
 
 void GymApi::initialise(std::string _iniPath){
+    cStaticFlag dummy;
     needsCleaning = true;
     // initializations
     CodeFragments::executeAll(CodeFragments::STARTUP);
@@ -34,7 +35,6 @@ void GymApi::initialise(std::string _iniPath){
     
     // set up an environment for the simulation
     env = new Cmdrlenv();
-    
     bootconfigptr = new SectionBasedConfiguration();
     inifilePtr = new InifileReader(); 
 
@@ -44,9 +44,35 @@ void GymApi::initialise(std::string _iniPath){
     // activate [General] section so that we can read global settings from it
     bootconfigptr->setConfigurationReader(inifilePtr);
 
+    // have cmdrlenv take over the boot-time envir listeners (this allows components to be managed and initialized. Prevents the <!> cannot find INITSTAGE_LAST bug.)
+    for (auto l : getEnvir()->getLifecycleListeners()) {
+        std::cout << "GymApi.cc::initialise() adding a life cycle listener." << endl;
+        env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
+    }
+            
     simulationPtr = new cSimulation("simulation", env);
     cSimulation::setActiveSimulation(simulationPtr);
-    
+
+    std::string varNames;
+    for (const char* s : bootconfigptr->getIterationVariableNames()) {
+        varNames += s;
+        varNames += " ";
+    }
+
+    std::string predefVarNames;
+    for (const char* s : bootconfigptr->getPredefinedVariableNames()) {
+        predefVarNames += s;
+        predefVarNames += " ";
+    }
+    cout << "VarNames:" << endl;
+    cout << varNames << endl;
+
+    cout << "predefVarNames:" << endl;
+    cout << predefVarNames << endl;
+
+    cout << "fileName:" << endl;
+    cout << bootconfigptr->getFileName() << endl;
+    cout << "GymAPI is done, about to initialize environment: " << endl;
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr);
 }
 

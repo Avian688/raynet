@@ -14,6 +14,7 @@ inline bool elapsed(long millis, int64_t& since)
 }
 
 void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject){
+    cout << "Cmdrlenv::initialiseEnvironment()------------------------" << endl;
     opt = static_cast<CmdenvOptions*>(createOptions());
 
     args = new ArgList();
@@ -34,7 +35,6 @@ void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *con
             opt->configName = args->optionValue('c');
         if (opt->configName.empty())
             opt->configName = "General";
-
         if (args->optionGiven('r'))  // note: do not overwrite value from cmdenv-runs-to-execute option!
             opt->runFilter = args->optionValue('r');
 

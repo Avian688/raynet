@@ -12,8 +12,8 @@ from ray.tune import Tuner
 from ray.air import CheckpointConfig
 import random
 import math
-from ray.rllib.algorithms.ppo.ppo import AlgorithmConfig
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
+from ray.rllib.algorithms.sac.sac import SACConfig
 import os
 import time
 from random import randint
@@ -164,12 +164,12 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 if __name__ == '__main__':
     #raise Exception("This script expects arguments ENV, NUM_WORKERS, SEED. Please provide arguments or use a runner.py")
     env = "OmnetGymApiEnv"
-    num_workers = 1
+    num_workers = 0
     seed = 987141
     bottleneck_bandwidth_range = (6, 192)      # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (4, 400)               # Orca: 4ms-400ms
     bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    steps_to_train = 40000
+    steps_to_train = 400000
     
     random.seed(seed)
     np.random.seed(seed)
@@ -181,19 +181,19 @@ if __name__ == '__main__':
 
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
-    ray.init(num_cpus=64, num_gpus=len(gpus))
+    ray.init(num_cpus=1, num_gpus=len(gpus))
     config = (
-            PPOConfig()
-            .resources(num_gpus=0)
+            SACConfig()
+            .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers)
-            .learners(num_gpus_per_learner=0)
+            .learners(num_gpus_per_learner=len(gpus))
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
             .training()       
             #.build_algo()
             )
     
     exp:ExperimentAnalysis = ray.tune.run(
-        "PPO",
+        "SAC",
         name="orca_training",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config
@@ -208,4 +208,4 @@ if __name__ == '__main__':
     
     for trial_id, trial_df in trials_dfs.items():
         print(f"Creating plot for trial {trial_id}")
-        eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
+        eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_ser ies.pdf")

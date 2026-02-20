@@ -1,16 +1,17 @@
 package Orca;
 
-import Orca.OrcaNet;
-import Orca.Orca;
-import Orca.RLTcp;
+
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networks.base.NetworkBase;
 import inet.node.inet.StandardHost;
 import inet.node.inet.Router;
+import inet.node.ethernet.Eth10M;
 import ned.IdealChannel;
 import ned.DatarateChannel;
 import ned.IBidirectionalChannel;
-import inet.node.ethernet.Eth10M;
+import Orca.OrcaNet;
+import Orca.Orca;
+import Orca.RLTcp;
 
 import RLComponents.Broker;
 import RLComponents.Stepper;
