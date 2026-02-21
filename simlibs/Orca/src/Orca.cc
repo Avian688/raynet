@@ -5,7 +5,6 @@
 #include "Orca.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
-#include "inet/common/InitStages.h"
 
 using namespace inet::tcp;
 using namespace inet;

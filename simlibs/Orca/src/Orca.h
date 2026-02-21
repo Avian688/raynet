@@ -12,7 +12,6 @@
 #include "BrokerData.h"
 #include "RLInterface.h"
 #include <inet/common/INETDefs.h>
-#include "inet/common/InitStages.h"
 
 #include "MonitorInterval.h"
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
