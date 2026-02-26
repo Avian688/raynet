@@ -1,3 +1,5 @@
+#include "omnetpp/clistener.h"
+#include "omnetpp/simkerneldefs.h"
 #ifdef ORCA
 #ifndef __ORCA_CC_H_
 #define __ORCA_CC_H_
@@ -12,6 +14,7 @@
 #include "BrokerData.h"
 #include "RLInterface.h"
 #include <inet/common/INETDefs.h>
+#include <numeric>
 
 #include "MonitorInterval.h"
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
@@ -29,8 +32,6 @@ class Orca : public TcpCubic, public RLInterface
 protected:
     // am I running on active open (client) or passive open connection (server)
     bool isActive;
-    // OMNeT++ message used to schedule monitor intervals
-    cMessage *RLStep;
 
     // utility object that keeps track of Monitor Intervals and relevant calculations
     MonitorIntervalsHandler miHandler;
@@ -46,13 +47,23 @@ public: // General use
     Orca();
     virtual ~Orca();
 
-    // TcpCubic Overrides (Congestion control functions we want to alter the behaviour of, or grab statistics with)
+    // 
+    using RLInterface::receiveSignal;
+    virtual void receiveSignal(cComponent *source, simsignal_t signalID, double value, cObject *details) override 
+    {
+      TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
+      if (signalID == pacedConn->retransmissionRateSignal) {
+        retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
+      } 
+    }
+
+    // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
 
-    // RLInterface Overrides (virtual functions that must be overridden)
+    // RLInterface Overrides (Required by the RL agent)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
     virtual void resetStepVariables()override;
     virtual void decisionMade(ActionType action) override; // Call back from RLInterface. Called when the action from the agent has been received.
@@ -69,9 +80,10 @@ public: // General use
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
 
-    // Orca parameters
-    double delayWeight = 1; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
-
+    // Orca parameters (Default values here, overridden in orca.ini)
+    double rewardDelayForgiveness = 1; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*rewardDelayForgiveness. Larger values emphasize aggressive throughputs by forgiving delay increases.
+    double rewardLossMultiplier = 1;   // Zeta term from Orca paper. Throughput is substracted by lossRate*rewardLossMultiplier in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
+    
     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     double orcaLossRate=0.0;      // The average loss rate of packets over the last interval
@@ -85,8 +97,8 @@ public: // General use
 
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
-    double lastIntervalSentBytes = 0.0; // Whatever value state->sentBytes returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
-    uint32_t lastIntervalSndUna = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
+    double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
+    uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
     uint32_t bytesSentTotal = 0;
     uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
     // Old - to be removed
@@ -97,6 +109,8 @@ public: // General use
     double slowstartMultiplier=1; // The RL action: changes how quickly slow start increases CWND
     double maxCwnd=1.0; // The max cwnd observed in an interval
     double maxACKTotal=1.0; // The max ACK total observed in an interval
+    double retransmissionRate; // The most recent measurement of bytes retransmitted.
+    bool first_slowstart_complete = false; // Do not take orca actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
   };
 #endif
 #endif

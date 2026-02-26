@@ -1,10 +1,13 @@
 package Orca;
 
+@namespace(inet);
 
+import inet.common.misc.ThruputMeteringChannel;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
-import inet.node.inet.StandardHost;
 import inet.node.inet.Router;
-import ned.DatarateChannel;
+import inet.node.inet.StandardHost;
+import RLComponents.Broker;
+import RLComponents.Stepper;
 import Orca.OrcaNet;
 import Orca.Orca;
 import Orca.OrcaTcp;
@@ -16,39 +19,28 @@ network OrcaNet
 {
     parameters:
         // @statistic[packetDropped] (source = packetDropped; record = count);
-        @display("bgb=800,395");
         int numberOfFlows = default(1);
         
     types:
-        channel standardLine extends DatarateChannel
+        channel bottleneckLine extends ThruputMeteringChannel
         {
-            delay = 4.75ms;
-            datarate = 10Mbps;
+            delay = 10 ms; 
+            datarate = 96 Mbps; 
         }
-
-        channel bottleneckLine extends DatarateChannel
+        
+        channel standardLine extends ThruputMeteringChannel
         {
-            delay = 0.5ms;
-            datarate = 10Mbps;
+            delay = 0ms;
+            datarate = 1000Gbps;
         }
     submodules:
     
-        configurator: Ipv4NetworkConfigurator {
-            @display("p=0,0;is=s");
-        }
+        configurator: Ipv4NetworkConfigurator;
         
-        client[numberOfFlows]: StandardHost {
-            @display("p=68,71,c,70,numberOfFlows,150");
-        }
-        server[numberOfFlows]: StandardHost {
-            @display("p=431,71,c,70,numberOfFlows,150");
-        }
-        router1: Router {
-            @display("p=200,150");
-        }
-        router2: Router {
-            @display("p=300,150");
-        }
+        client[numberOfFlows]: StandardHost;
+        server[numberOfFlows]: StandardHost;
+        router1: Router;
+        router2: Router;
         broker: Broker;
 		stepper: Stepper;
     connections:

@@ -40,7 +40,7 @@ endforeach()
 message(MY_LIB_LINK_LIBRARIES_RELEASE IS ${MY_LIB_LINK_LIBRARIES_RELEASE})
 
 # Declare debug libraries
-set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv_dbg debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib
+set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib
 message(MY_LIB_LINK_LIBRARIES_DEBUG IS ${MY_LIB_LINK_LIBRARIES_DEBUG})
 foreach(lib_name ${LIB_NAMES})
     list(APPEND MY_LIB_LINK_LIBRARIES_DEBUG "debug")
@@ -52,8 +52,8 @@ message(MY_LIB_LINK_LIBRARIES_DEBUG IS ${MY_LIB_LINK_LIBRARIES_DEBUG})
 # Link omnet
 find_package(OmnetPP 6.0.1 REQUIRED)
 include(OmnetppHelpers)
-add_compile_options(-fpermissive -fno-omit-frame-pointer -fPIC -MMD -MP -MF )
-add_compile_definitions($ENV{RAYNET_FEATURE} HAVE_SWAPCONTEXT  WITH_NETBUILDER)
+add_compile_options(-fpermissive -fno-omit-frame-pointer -fPIC -MMD -MP -MF -frtti)
+add_compile_definitions($ENV{RAYNET_FEATURE} HAVE_SWAPCONTEXT)
 find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development)
 include_directories(${Python3_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/extern/pybind11/include ${OMNETPP_INCLUDE_DIR} ${OMNETPP_ROOT}/include ${OMNETPP_ROOT}/src ${LIB_PATHS})
 link_directories(${OMNETPP_ROOT}/lib ${INET_MODEL_PATH} ${LIB_PATHS})
@@ -65,6 +65,7 @@ add_executable(testcpp ${PROJECT_SOURCE_DIR}/src/gymApiTest.cc)
 
 add_subdirectory(extern/pybind11)
 pybind11_add_module(omnetbind MODULE ${PROJECT_SOURCE_DIR}/src/GymApiBind.cc)
+set_target_properties(omnetbind PROPERTIES DEBUG_POSTFIX "") # Force omnetbind.so to not have the _dbg postfix. This allows the python import to continue working without changes.
 message(PROJECT_SOURCE_DIR="${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_BUILD_TYPE STREQUAL release)
@@ -76,7 +77,7 @@ if(CMAKE_BUILD_TYPE STREQUAL release)
 elseif(CMAKE_BUILD_TYPE STREQUAL debug)
     target_link_libraries(Cmdrlenv oppcmdenv_dbg)
     set_target_properties(Cmdrlenv PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-
+    target_link_libraries(omnetbind PRIVATE rlomnet)
     target_link_libraries(rlomnet PRIVATE ${MY_LIB_LINK_LIBRARIES_DEBUG})
     set_target_properties(testcpp PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
     target_link_libraries(testcpp rlomnet oppsim_dbg)

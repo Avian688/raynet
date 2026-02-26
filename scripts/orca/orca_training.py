@@ -32,13 +32,14 @@ class OmnetGymApiEnv(gym.Env):
         self.env_config = env_config
         self.step_count = 0 # just for debugging
 
-        # Initialize env parameters to some reasonable defaults (these will be quickly overwritten in reset())
+        # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
         self.bw = self.env_config["bottleneck_bw_range"][0]
         self.base_rtt = self.env_config["minimum_rtt_range"][1]
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
+        self.max_steps_range = self.env_config["max_steps_range"][1]
 
         # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-.01, high=.01, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+        self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
 
         # Define the observation space (expected values/types for each observation feature)
@@ -52,40 +53,43 @@ class OmnetGymApiEnv(gym.Env):
                       0,                            # max throughput
                       0                             # min delay
                       ]
-        high_bounds = [1,                           # Throughput    (should be normalized, range from 0 to max measured throughput so far)
-                      1,                            # Lossrate      NOT IMPLEMENTED YET
-                      10, #?                        # avg delay          
-                      1,                            # number of acks 
-                      1, #?                         # Interval duration
-                      1, #?                         # srtt
-                      np.finfo(np.float32).max,     # cwnd
-                      np.finfo(np.float32).max,     # max throughput    (TODO: Normalize based on link capacity)
-                      1  #?                         # min delay          (TODO: Normalize based on base_rtt)
+        high_bounds = [1,                           # Throughput        (normalized to max_throughput)
+                      1,                            # Lossrate          (normalized, percentage of retransmits)
+                      10,                           # avg delay         (multiplier of base_rtt)
+                      20,                           # number of acks    (Log of acked_bytes)
+                      1,                            # Interval duration (raw seconds)
+                      10,                           # srtt              (multiplier of base_rtt, maybe should be raw?)
+                      20,                           # cwnd              (log, usually 10-15)
+                      20,                           # max throughput    (log, usually 10-15)
+                      1                             # min delay         (raw)
                       ]
                       
         low_bounds = np.array(low_bounds, dtype=np.float32)
         high_bounds = np.array(high_bounds, dtype=np.float32)
         self.observation_space = spaces.Box(
-            low=low_bounds.astype(np.float32), 
-            high=high_bounds.astype(np.float32), 
+            low=low_bounds, 
+            high=high_bounds, 
             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
        
     def reset(self, *, seed=None, options=None):
-        #print("\tRESET BEING CALLED")
+        
         
         # Grab environment parameter ranges
         bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
         base_rtt_range = self.env_config["minimum_rtt_range"]
         bottleneck_buffer_range = self.env_config["bottleneck_buffer_range"]
+        max_steps_range = self.env_config["max_steps_range"]
         
         # Randomize environment parameters. Save them for obs normalization later.
         self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
         self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
         self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
+        self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
 
-        print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
-        print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
-        print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
+        # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
+        # print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
+        # print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
+        # print("MAX_RL_STEPS: ", f"{self.max_steps}")
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
@@ -95,6 +99,7 @@ class OmnetGymApiEnv(gym.Env):
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
         ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt}ms")
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
+        ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
@@ -102,7 +107,7 @@ class OmnetGymApiEnv(gym.Env):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
         obs = self.runner.reset()
-        obs = np.asarray(list(obs['Orca']),dtype=np.float32)
+        obs = np.asarray(obs['Orca'],dtype=np.float32)
         #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
         return  obs, {}
 
@@ -138,19 +143,19 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
         
-        printFreq = 10
-        if self.step_count % printFreq == 0:
+        printFreq = 1000
+        if self.step_count % printFreq == 100:
             print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
-            print(f"\t\tThroughput: {obs[0]:.2f}x             \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {obs[1]:.2f}               \t\t(PLACEHOLDER)")
-            print(f"\t\tAverage Delay: {obs[2]:.2f}x          \t\t(Normalized, per interval)")
-            print(f"\t\tACK Count: {obs[3]:.2f}x              \t\t(Normalized, per interval)")
-            print(f"\t\tInterval Duration: {obs[4]:.2f}s      \t\t(Raw, per interval)")
-            print(f"\t\tSRTT: {obs[5]:.2f}x                   \t\t(Normalized, current)")
-            print(f"\t\tcwnd: {obs[6]:.2f}x                   \t\t(Normalized, current)")
-            print(f"\t\tMax Throughput: {obs[7]:.2f}b         \t\t(Raw, overall)")
-            print(f"\t\tMin Delay: {obs[8]:.2f}s              \t\t(Raw, overall)")
+            print(f"\t\tThroughput: {(obs[0]*100):.2f}%             \t\t(Normalized, per interval)")
+            print(f"\t\tLoss Rate: {(obs[1]*100):.2f}%        \t\t(Normalized, per interval)")
+            print(f"\t\tAverage Delay: {obs[2]:.2f}x          \t\t(Multiplier, per interval)")
+            print(f"\t\tACK Count: {obs[3]:.2f}x              \t\t(Log, per interval)") #? Identical to goodput(throughput) if normalized. 
+            print(f"\t\tInterval Duration: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
+            print(f"\t\tSRTT: {obs[5]:.2f}x                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
+            print(f"\t\tcwnd: {obs[6]:.2f}                    \t\t(Log, current)") #? Maybe normalize?
+            print(f"\t\tMax Throughput: {obs[7]:.2f}          \t\t(Log, overall)") #? Cannot normalize?
+            print(f"\t\tMin Delay: {obs[8]:.2f}s              \t\t(Raw, overall)") #? Cannot normalize?
             
             print(f"\tRewards:")
             print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
@@ -166,14 +171,14 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    #raise Exception("This script expects arguments ENV, NUM_WORKERS, SEED. Please provide arguments or use a runner.py")
     env = "OmnetGymApiEnv"
-    num_workers = 0
+    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 987141
-    bottleneck_bandwidth_range = (6, 192)      # Orca: 6Mbps-192Mbps
-    minimum_rtt_range = (4, 400)               # Orca: 4ms-400ms
+    bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
+    minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    steps_to_train = 400000
+    max_steps_range = (4522, 5377)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    steps_to_train = 5000000
     
     random.seed(seed)
     np.random.seed(seed)
@@ -181,7 +186,8 @@ if __name__ == '__main__':
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
-                  "bottleneck_buffer_range": bottleneck_buffer_range}
+                  "bottleneck_buffer_range": bottleneck_buffer_range,
+                  "max_steps_range": max_steps_range}
 
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
@@ -189,10 +195,12 @@ if __name__ == '__main__':
     config = (
             SACConfig()
             .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers)
+            .env_runners(num_env_runners=num_workers, rollout_fragment_length=1000)
             .learners(num_gpus_per_learner=len(gpus))
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
-            .training()       
+            .evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
+            .fault_tolerance(restart_failed_sub_environments=True)
+            .training(num_steps_sampled_before_learning_starts=0)  
             #.build_algo()
             )
     

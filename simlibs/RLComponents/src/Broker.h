@@ -38,12 +38,12 @@ protected:
   // Map of active agents. Key is the string name of the agent (TODO: full path or just conn-N?), valiue is 
   // is a struct containing info on the current stepping logic
   std::unordered_map<std::string, BrokerDetails> activeAgents;
-
-  virtual void finish();
-  virtual void initialize();
-  virtual void handleMessage(cMessage *msg);
-  void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj);
-  void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj);
+  using cListener::finish;
+  virtual void finish() override;
+  virtual void initialize() override;
+  virtual void handleMessage(cMessage *msg) override;
+  void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj) override;
+  void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) override;
 
   simsignal_t brokerToStepper;
   

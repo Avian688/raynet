@@ -1,58 +1,57 @@
+#include "omnetpp/csimulation.h"
 #include <GymApi.h>
 #include <string>
 
 
-GymApi::GymApi(){   
+GymApi::GymApi(){
 }
 
 void GymApi::cleanupmemory(){
-
-    getSimulation()->deleteNetwork();
-    cSimulation::setActiveSimulation(nullptr);
-    delete simulationPtr; // deletes env as well
+    if (getSimulation()!=nullptr) {
+        getSimulation()->deleteNetwork();
+        cSimulation::setActiveSimulation(nullptr);
+        delete simulationPtr; // deletes env as well
+    }
     // CodeFragments::executeAll(CodeFragments::SHUTDOWN);
-
-    // needsCleaning = false;
-    // //delete env;
+    // cout << "GymApi.cc::cleanupmemory(): Manually removing all dead lifecyclelisteners from static env:" << endl;
+    // int size = getEnvir()->listeners.size();
+    // for (int listener = 0; listener < size; listener++) {
+    //     cout << "\tpopping..." << endl;
+    //     getEnvir()->listeners.pop_back();
+    // }
     
-    // cSimulation::setActiveSimulation(nullptr);
+    // cout << "Done removing listeners. Listener list after removal: " << endl;
+
+    // delete env;
+
     // delete simulationPtr;
     // delete event;
     // delete bootconfigptr;
     // delete inifilePtr;
-    
 }
 
 void GymApi::initialise(std::string _iniPath){
-    cStaticFlag dummy;
-    needsCleaning = true;
     // initializations
     CodeFragments::executeAll(CodeFragments::STARTUP);
     SimTime::setScaleExp(-12);
-    
     // char s1[] = "";
     std::vector<char*> cstrings; // final arguments for Omnet++
-    
     // set up an environment for the simulation
     env = new Cmdrlenv();
     bootconfigptr = new SectionBasedConfiguration();
     inifilePtr = new InifileReader(); 
-
     //Read simulation configuration parameters from inifile
     inifilePtr->readFile(_iniPath.c_str());
-
     // activate [General] section so that we can read global settings from it
     bootconfigptr->setConfigurationReader(inifilePtr);
-
-    // have cmdrlenv take over the boot-time envir listeners (this allows components to be managed and initialized. Prevents the <!> cannot find INITSTAGE_LAST bug.)
     for (auto l : getEnvir()->getLifecycleListeners()) {
-        std::cout << "GymApi.cc::initialise() adding a life cycle listener." << endl;
-        env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
+        // Idea: rather than calling the staticEnvir that initially loads up, you may be calling the previous environment
+            env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
     }
-            
+    
     simulationPtr = new cSimulation("simulation", env);
     cSimulation::setActiveSimulation(simulationPtr);
-
+    
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr);
 }
 

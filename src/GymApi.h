@@ -30,7 +30,6 @@ class GymApi{
         cStaticFlag dummy;
         SectionBasedConfiguration *bootconfigptr;
         InifileReader *inifilePtr;
-        bool needsCleaning = false;
 
         GymApi();
 
@@ -42,6 +41,7 @@ class GymApi{
         void cleanupmemory();
 
         void shutdown();
-};
+        int simCount = 0;
+    };
 
 #endif
