@@ -173,11 +173,11 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
-    seed = 987141
+    seed = 91456211
     bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (4522, 5377)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (492, 507)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     steps_to_train = 5000000
     
     random.seed(seed)
@@ -195,21 +195,21 @@ if __name__ == '__main__':
     config = (
             SACConfig()
             .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers, rollout_fragment_length=1000)
-            .learners(num_gpus_per_learner=len(gpus))
+            .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
+            .learners(num_learners=1, num_gpus_per_learner=len(gpus))
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
-            .evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
-            .fault_tolerance(restart_failed_sub_environments=True)
-            .training(num_steps_sampled_before_learning_starts=0)  
+            ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
+            ##.fault_tolerance(restart_failed_sub_environments=True)
+            .training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             #.build_algo()
             )
     
     exp:ExperimentAnalysis = ray.tune.run(
         "SAC",
-        name="orca_training",
+        name="orca_training_2",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
-        config=config
-        #TODO: Add some sort of CheckpointFrequency
+        config=config,
+        checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
     )
     
     trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
@@ -220,4 +220,4 @@ if __name__ == '__main__':
     
     for trial_id, trial_df in trials_dfs.items():
         print(f"Creating plot for trial {trial_id}")
-        eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_ser ies.pdf")
+        eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
