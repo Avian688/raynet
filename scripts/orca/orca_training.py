@@ -44,24 +44,20 @@ class OmnetGymApiEnv(gym.Env):
 
         # Define the observation space (expected values/types for each observation feature)
         low_bounds = [0,                            # Throughput
+                      0,                            # Pacerate
                       0,                            # Lossrate
-                      0,                            # avg delay
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
-                      0,                            # cwnd
-                      0,                            # max throughput
-                      0                             # min delay
+                      0,                            # Delay metric
                       ]
-        high_bounds = [1,                           # Throughput        (normalized to max_throughput)
-                      1,                            # Lossrate          (normalized, percentage of retransmits)
-                      10,                           # avg delay         (multiplier of base_rtt)
-                      20,                           # number of acks    (Log of acked_bytes)
-                      1,                            # Interval duration (raw seconds)
-                      10,                           # srtt              (multiplier of base_rtt, maybe should be raw?)
-                      20,                           # cwnd              (log, usually 10-15)
-                      20,                           # max throughput    (log, usually 10-15)
-                      1                             # min delay         (raw)
+        high_bounds = [1,                           # Throughput
+                      10,                           # Pacerate
+                      10,                           # Lossrate
+                      10,                           # Number of ACKs
+                      1,                            # Interval duration
+                      1,                            # srtt
+                      1,                            # Delay metric
                       ]
                       
         low_bounds = np.array(low_bounds, dtype=np.float32)
@@ -143,19 +139,17 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
         
-        printFreq = 1000
-        if self.step_count % printFreq == 100:
+        printFreq = 1
+        if self.step_count % printFreq == 0:
             print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
-            print(f"\t\tThroughput: {(obs[0]*100):.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {(obs[1]*100):.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tAverage Delay: {obs[2]:.2f}x          \t\t(Multiplier, per interval)")
-            print(f"\t\tACK Count: {obs[3]:.2f}x              \t\t(Log, per interval)") #? Identical to goodput(throughput) if normalized. 
-            print(f"\t\tInterval Duration: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
-            print(f"\t\tSRTT: {obs[5]:.2f}x                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
-            print(f"\t\tcwnd: {obs[6]:.2f}                    \t\t(Log, current)") #? Maybe normalize?
-            print(f"\t\tMax Throughput: {obs[7]:.2f}          \t\t(Log, overall)") #? Cannot normalize?
-            print(f"\t\tMin Delay: {obs[8]:.2f}s              \t\t(Raw, overall)") #? Cannot normalize?
+            print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
+            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
+            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
+            print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
+            print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
+            print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
+            print(f"\t\tDelay: {obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
             
             print(f"\tRewards:")
             print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
@@ -172,7 +166,7 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
@@ -193,23 +187,23 @@ if __name__ == '__main__':
     print("GPUs Available:", gpus)
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
-            SACConfig()
+            PPOConfig()
             .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
-            .learners(num_learners=1, num_gpus_per_learner=len(gpus))
+            # .learners(num_learners=1, num_gpus_per_learner=len(gpus))
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
             ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
             ##.fault_tolerance(restart_failed_sub_environments=True)
-            .training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
+            ##.training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             #.build_algo()
             )
     
-    exp:ExperimentAnalysis = ray.tune.run(
-        "SAC",
+    ray.tune.run(
+        "PPO",
         name="orca_training_2",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config,
-        checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
+        # checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
     )
     
     trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
