@@ -79,7 +79,6 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         details.isReset = true;
         details.endOfStep = new cMessage((std::string("EOS-") + id).c_str()); // Name of the message should match EOS-<ID>
         details.stepMsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
-        details.stepSize = ((cSimTime *) obj)->simtime.dbl();
 
         //Inserting new agent details into map (but do not schedule it yet!)
         activeAgents.insert({id,details});
@@ -108,14 +107,12 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         // STEPPER: schedule a new step event
         //Get id
         std::string id(value);
-        float stepSize = (float) ((cSimTime *) obj)->simtime.dbl();
-        activeAgents[id].stepSize = stepSize;
 
         if(activeAgents[id].stepMsg->isScheduled()){
             cancelEvent(activeAgents[id].stepMsg);
             take(activeAgents[id].stepMsg);
         }
-        scheduleAt(simTime() + activeAgents[id].stepSize, activeAgents[id].stepMsg);
+        scheduleAt(simTime() + ((cSimTime*) obj)->simtime, activeAgents[id].stepMsg);
     }
 }
 

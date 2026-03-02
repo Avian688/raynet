@@ -37,7 +37,6 @@ struct BrokerDetails{
   ObsType observation;
   float reward;
   bool done;
-  float stepSize; //  Time between steps in seconds (might delete)
 };
 
 /*
