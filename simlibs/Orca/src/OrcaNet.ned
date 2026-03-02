@@ -18,20 +18,21 @@ import RLComponents.Stepper;
 network OrcaNet
 {
     parameters:
-        // @statistic[packetDropped] (source = packetDropped; record = count);
         int numberOfFlows = default(1);
+        double bottleneckDatarate @unit("Mbps") = default(3Mbps);
+        double bottleneckDelay @unit("ms") = default(10ms);
         
     types:
         channel bottleneckLine extends ThruputMeteringChannel
         {
-            delay = 10 ms; 
-            datarate = 96 Mbps; 
+            delay = parent.bottleneckDelay; 
+            datarate = parent.bottleneckDatarate; 
         }
         
         channel standardLine extends ThruputMeteringChannel
         {
             delay = 0ms;
-            datarate = 1000Gbps;
+            datarate = 1000Mbps;
         }
     submodules:
     

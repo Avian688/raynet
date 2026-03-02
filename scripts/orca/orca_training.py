@@ -20,6 +20,7 @@ from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
 import eval_utils
+from collections import deque
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -28,10 +29,12 @@ class OmnetGymApiEnv(gym.Env):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
+        #self.spec = gym.envs.registration.EnvSpec(id="OmnetppEnv", entry_point=self.__init__,max_episode_steps=400)
         self.runner = OmnetGymApi()
         self.env_config = env_config
         self.step_count = 0 # just for debugging
-
+        self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
+        random.seed(self.random_seed)
         # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
         self.bw = self.env_config["bottleneck_bw_range"][0]
         self.base_rtt = self.env_config["minimum_rtt_range"][1]
@@ -43,32 +46,36 @@ class OmnetGymApiEnv(gym.Env):
 
 
         # Define the observation space (expected values/types for each observation feature)
-        low_bounds = [0,                            # Throughput
+        self.obs_min = np.tile(np.array(
+                     [0,                            # Throughput
                       0,                            # Pacerate
                       0,                            # Lossrate
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
-                      0,                            # Delay metric
-                      ]
-        high_bounds = [1,                           # Throughput
+                      0                             # Delay metric
+                      ], dtype=np.float32), 10)
+        self.obs_max = np.tile(np.array(
+                     [1,                            # Throughput
                       10,                           # Pacerate
                       10,                           # Lossrate
                       10,                           # Number of ACKs
                       1,                            # Interval duration
                       1,                            # srtt
                       1,                            # Delay metric
-                      ]
-                      
-        low_bounds = np.array(low_bounds, dtype=np.float32)
-        high_bounds = np.array(high_bounds, dtype=np.float32)
+                      ], dtype=np.float32), 10)
         self.observation_space = spaces.Box(
-            low=low_bounds, 
-            high=high_bounds, 
+            low=self.obs_min, 
+            high=self.obs_max, 
             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
+        
+        # Create empty observation history deque
+        self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
+        
        
     def reset(self, *, seed=None, options=None):
-        
+        # Reset the observation history to empty
+        self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
         
         # Grab environment parameter ranges
         bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
@@ -93,7 +100,7 @@ class OmnetGymApiEnv(gym.Env):
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
-        ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt}ms")
+        ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
@@ -103,9 +110,11 @@ class OmnetGymApiEnv(gym.Env):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
         obs = self.runner.reset()
-        obs = np.asarray(obs['Orca'],dtype=np.float32)
+        obs = obs['Orca']
+        self.obs_history.extend(obs)
+        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
         #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
-        return  obs, {}
+        return  return_obs_history, {}
 
     def step(self, actions):
         """
@@ -118,8 +127,11 @@ class OmnetGymApiEnv(gym.Env):
         actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
         action = {'Orca': actions}               
         obs, rewards, terminateds, info_ = self.runner.step(action)
+        self.obs_history.extend(obs['Orca'])
+        
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
         obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
+        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
         #TODO: Append this to self.obs_history and return that instead. 
         reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
         sim_truncated = False
@@ -140,7 +152,7 @@ class OmnetGymApiEnv(gym.Env):
             sim_truncated = True
         
         printFreq = 1
-        if self.step_count % printFreq == 0:
+        if self.step_count % printFreq == -1:
             print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
             print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
@@ -155,7 +167,8 @@ class OmnetGymApiEnv(gym.Env):
             print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
         self.step_count += 1
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        return  obs, reward, terminateds['Orca'], sim_truncated, {"test": "this is a test! Can the Orca see this info?"}
+        
+        return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
 
 
 # Generates the OmnetGymApiEnv for the calling ray worker
@@ -166,12 +179,16 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 14 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
-    bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
-    minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
-    bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (492, 507)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
+    # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
+    # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
+    max_steps_range = (2000, 2000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    bottleneck_bandwidth_range = (3, 3)            
+    minimum_rtt_range = (10, 10)                     
+    bottleneck_buffer_range = (960000, 960000) 
+    
     steps_to_train = 5000000
     
     random.seed(seed)
@@ -187,19 +204,19 @@ if __name__ == '__main__':
     print("GPUs Available:", gpus)
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
-            PPOConfig()
+            SACConfig()
             .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
-            # .learners(num_learners=1, num_gpus_per_learner=len(gpus))
+            .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
             ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
             ##.fault_tolerance(restart_failed_sub_environments=True)
-            ##.training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
+            # .training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             #.build_algo()
             )
     
     ray.tune.run(
-        "PPO",
+        "SAC",
         name="orca_training_2",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config,

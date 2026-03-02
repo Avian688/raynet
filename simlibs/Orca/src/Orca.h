@@ -92,10 +92,11 @@ public: // General use
     double orcaIntervalDuration=0.0;  // The simtime elapsed over the last interval
     double orcaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
     double orcaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double orcaMaxThroughput=1.0; // The maximum delivery rate so far
+    double orcaMaxThroughput=.000001; // The maximum delivery rate so far
     double orcaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
     double orcaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
-    
+    double orcaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
+
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
     double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.

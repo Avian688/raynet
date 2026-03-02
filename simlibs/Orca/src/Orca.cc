@@ -253,7 +253,6 @@ void Orca::established(bool active) {
     if (debug) cout << "\tOrca: established()" << endl;
     TcpCubic::established(active);
     dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
-    dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->throughputSignal, (cListener*) this);
     if (active) {
         std::string s("Orca");
         setStringId(s);
@@ -279,8 +278,8 @@ ObsType Orca::computeObservation(){
         return {0, 0, 0, 0, 0, 0, 0};
     }
     dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
-    double delta_snd_max = state->snd_max - last_snd_max;
-    double delta_snd_una = state->snd_una - last_snd_una;
+    double delta_snd_max = state->snd_max - this->last_snd_max;
+    double delta_snd_una = state->snd_una - this->last_snd_una;
     this->orcaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
@@ -308,7 +307,12 @@ ObsType Orca::computeObservation(){
     if (this->rttReportCount > 0) {
         this->orcaMinDelay = std::min(this->orcaMinDelay, this->orcaDelay);
     }
-    
+
+    // Delay Metric: The delay metric is treated as optimal if within the forgiveness window. Otherwise, have it slowly decrease as delay inflates.
+    this->orcaDelayMetric = 1.0;
+    if (this->orcaDelay > this->orcaMinDelay * this->rewardDelayForgiveness) {                                             
+        this->orcaDelayMetric = this->orcaMinDelay * this->rewardDelayForgiveness / state->srtt;
+    }
     
     if (this->orcaACKTotal == 0 || done) {
         if (debug) cout << "No packets ACKed. Skipping this observation." << endl;
@@ -323,7 +327,6 @@ ObsType Orca::computeObservation(){
     //      interval_time (raw)
     //      min_rtt/srtt
     //      relaxed_min_rtt/srtt (1 if within delay margin)
-    double delay_metric = 0;
 
     return {this->orcaThroughput / this->orcaMaxThroughput,     // Normalized throughput
             this->orcaPaceRate / this->orcaMaxThroughput,       // Normalized pacerate
@@ -331,7 +334,7 @@ ObsType Orca::computeObservation(){
             this->orcaACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
             this->orcaIntervalDuration,                         // Monitor interval duration
             this->orcaMinDelay / this->orcaSRTT,                // Normalized SRTT (delay)
-            delay_metric
+            this->orcaDelayMetric                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
         };
 
     // return {this->orcaThroughput / this->orcaMaxThroughput,
@@ -354,18 +357,20 @@ RewardType Orca::computeReward(){
     if (this->rttReportCount == 0 || done || !this->first_slowstart_complete) {
         return RewardType(0.0);
     }
-    // Reward calculation: Reward the agent based on their proximity to the optimal throughput/delay ratio. (power)
-        // Delay: If the measured delay is within some forgiveness window, then it does not negatively impact reward. Forgiveness window determined by rewardDelayForgiveness.
-        // Loss: Loss directly subtracts from the rewards gained from thoughput. Strength of effect determined by rewardLossMultiplier.
-    double optimalPower = (this->orcaMaxThroughput/this->orcaMinDelay);         // Max possible reward based on observed max/min throughput/delay so far.
-    double currentPower;                                                        // Our actual measured reward for this interval
-    if (this->orcaDelay <= this->orcaMinDelay *this->rewardDelayForgiveness) {
-        currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaMinDelay;   // Delay forgiven
-    } else {                                                                    
-        currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaDelay;      // Delay NOT forgiven
-    }
-    double normalizedPower = currentPower / optimalPower; // How close this reward is to optimal. (0 is worst, 1 is optimal)
-    return RewardType(normalizedPower);
+    // // Reward calculation: Reward the agent based on their proximity to the optimal throughput/delay ratio. (power)
+    //     // Delay: If the measured delay is within some forgiveness window, then it does not negatively impact reward. Forgiveness window determined by rewardDelayForgiveness.
+    //     // Loss: Loss directly subtracts from the rewards gained from thoughput. Strength of effect determined by rewardLossMultiplier.
+    // double optimalPower = (this->orcaMaxThroughput/this->orcaMinDelay);         // Max possible reward based on observed max/min throughput/delay so far.
+    // double currentPower;                                                        // Our actual measured reward for this interval
+    // if (this->orcaDelay <= this->orcaMinDelay *this->rewardDelayForgiveness) {
+    //     currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaMinDelay;   // Delay forgiven
+    // } else {                                                                    
+    //     currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaDelay;      // Delay NOT forgiven
+    // }
+    // double normalizedPower = currentPower / optimalPower; // How close this reward is to optimal. (0 is worst, 1 is optimal)
+    // return RewardType(normalizedPower);
+
+    return( (this->orcaThroughput-(this->rewardLossMultiplier*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric);
 }
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
@@ -392,7 +397,7 @@ void Orca::decisionMade(ActionType action) {
         newCwnd =  max(state->snd_mss, newCwnd);
         // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
         if (newCwnd < 1000000) {
-            if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)state->snd_cwnd/(double)newCwnd << "x)" << endl;
+            if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
             state->snd_cwnd = newCwnd;
         }
         
