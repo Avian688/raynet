@@ -152,7 +152,7 @@ class OmnetGymApiEnv(gym.Env):
             sim_truncated = True
         
         printFreq = 1
-        if self.step_count % printFreq == -1:
+        if self.step_count % printFreq == 0:
             print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
             print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
@@ -179,7 +179,7 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 14 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms

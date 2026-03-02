@@ -22,6 +22,13 @@
 using namespace omnetpp;
 using namespace std;
 
+struct StepDetails{
+  float stepSize; //Time in seconds 
+  cMessage* stepMsg; // Msg used to notify end of step
+  std::string rlId; // String ID returned into the dictionary of pthon step() function
+  bool isReset; // Whether the next step is used as a RESET step, rather than normal step
+};
+
 struct BrokerDetails{
   cMessage* endOfStep; // Msg used to notify end of step
   std::string rlId; // String ID returned into the dictionary of pthon step() function
@@ -38,6 +45,11 @@ protected:
   // Map of active agents. Key is the string name of the agent (TODO: full path or just conn-N?), valiue is 
   // is a struct containing info on the current stepping logic
   std::unordered_map<std::string, BrokerDetails> activeAgents;
+  std::unordered_map<std::string, StepDetails> activeAgentsStepper;
+  std::unordered_map<std::string, StepDetails> rlId2id;
+
+  
+
   using cListener::finish;
   virtual void finish() override;
   virtual void initialize() override;
@@ -46,10 +58,14 @@ protected:
   void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) override;
 
   simsignal_t brokerToStepper;
-  
+
+  // stolen stepper class
+  simsignal_t actionResponse = registerSignal("actionResponse"); //communication signal from stepper to sender with the action from ray
+  simsignal_t pullObservations = registerSignal("pullObservations"); //communication signal from stepper to sender requestiing the obsevations.
+  simsignal_t stepperToBroker = registerSignal("stepperToBroker"); //communication signal from stepper to broker with observations
 
 public:
-
+  ~Broker();
  
   // Get the observation
   ObsType getObservation(std::string id);

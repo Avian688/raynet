@@ -7,13 +7,11 @@ import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import RLComponents.Broker;
-import RLComponents.Stepper;
+//import RLComponents.Stepper;
 import Orca.OrcaNet;
 import Orca.Orca;
 import Orca.OrcaTcp;
-        
-import RLComponents.Broker;
-import RLComponents.Stepper;
+
 
 network OrcaNet
 {
@@ -43,7 +41,7 @@ network OrcaNet
         router1: Router;
         router2: Router;
         broker: Broker;
-		stepper: Stepper;
+		//stepper: Stepper;
     connections:
         // Left
         for i=0..sizeof(client)-1 {
