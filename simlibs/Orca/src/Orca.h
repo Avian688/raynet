@@ -79,6 +79,7 @@ public: // General use
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
+    bool takeActions = true; // Skips Orca actions if false
 
     // Orca parameters (Default values here, overridden in orca.ini)
     double rewardDelayForgiveness = 1; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*rewardDelayForgiveness. Larger values emphasize aggressive throughputs by forgiving delay increases.

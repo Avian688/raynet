@@ -14,6 +14,7 @@ simple OrcaTcp extends TcpPaced
         double rewardLossMultiplier;                        // How strongly loss impacts reward (higher = stronger impact)
 
         bool printDebugMessages;                            // used to print debug messages
+        bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
         int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
         double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
         double delayWeight = default(5);                  // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.

@@ -227,6 +227,7 @@ void Orca::initialize() {
     this->rewardLossMultiplier = this->conn->getTcpMain()->par("rewardLossMultiplier");
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
     debug = this->conn->getTcpMain()->par("printDebugMessages");
+    takeActions = this->conn->getTcpMain()->par("takeActions");
 
     // provide the RLInterface with a cComponent API (to use signaling functionality)
     setOwner((cComponent*) conn->getTcpMain());
@@ -400,7 +401,7 @@ void Orca::decisionMade(ActionType action) {
         // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
         if (newCwnd < 1000000) {
             if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
-            state->snd_cwnd = newCwnd;
+            if (takeActions) state->snd_cwnd = newCwnd;
         }
         
 
@@ -409,7 +410,7 @@ void Orca::decisionMade(ActionType action) {
         // cout << "srtt: " << state->srtt.dbl() << endl;
         // cout << "interSendTime: " << newIntersendingTime << endl;
         orcaPaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
-        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // Time between bytes
+        if (takeActions) dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // Time between bytes
 
         // Change the stepSize to be 1 RTT (based on srtt)
         // cObject* newStepSizeObj = new cSimTime(state->srtt.dbl());

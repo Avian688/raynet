@@ -152,7 +152,7 @@ class OmnetGymApiEnv(gym.Env):
             sim_truncated = True
         
         printFreq = 1
-        if self.step_count % printFreq == 0:
+        if self.step_count % printFreq == -1:
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
@@ -180,15 +180,15 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 14 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (500, 500)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
-    bottleneck_bandwidth_range = (3, 3)            
-    minimum_rtt_range = (10, 10)                     
-    bottleneck_buffer_range = (960000, 960000) 
+    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    bottleneck_bandwidth_range = (6, 6)            
+    minimum_rtt_range = (5, 5)                     
+    bottleneck_buffer_range = (5280000, 5280000) 
     
     steps_to_train = 5000000
     
@@ -218,11 +218,11 @@ if __name__ == '__main__':
     
     ray.tune.run(
         "SAC",
-        name="orca_training_2",
+        name="orca",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config,
         resume=False,
-        checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
+        checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True)
     )
     
     trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
