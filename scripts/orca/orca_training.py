@@ -6,6 +6,8 @@ from gymnasium import spaces
 import numpy as np
 import math
 from ray.tune.registry import register_env
+from ray.rllib.callbacks.callbacks import RLlibCallback
+
 import ray
 from ray import tune
 from ray.tune import Tuner
@@ -14,6 +16,7 @@ import random
 import math
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
 from ray.rllib.algorithms.sac.sac import SACConfig
+from ray.rllib.algorithms.sac.sac import SAC
 import os
 import time
 from random import randint
@@ -170,8 +173,7 @@ class OmnetGymApiEnv(gym.Env):
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         
         return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
-
-
+        
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
@@ -180,15 +182,17 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 13 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (500, 500)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)                     
     bottleneck_buffer_range = (5280000, 5280000) 
+    #checkpoint_load_dir = os.getenv('HOME') + "/ray_results/JAMESTEST"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021"
     
     steps_to_train = 5000000
     
@@ -200,7 +204,7 @@ if __name__ == '__main__':
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,
                   "max_steps_range": max_steps_range}
-
+    
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
     ray.init(num_cpus=16, num_gpus=len(gpus))
@@ -209,21 +213,51 @@ if __name__ == '__main__':
             .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
             .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
-            .environment(env, env_config=env_config) # "OmnetGymApiEnv
+            .environment(env, env_config=env_config) # "OmnetGymApiEnvd
+            #.training(optimizer={"foreach": False, "capturable": True})
             ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
             ##.fault_tolerance(restart_failed_sub_environments=True)
             # .training(training_intensity=500)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
-            #.build_algo()
+           # .build_algo().learner_group.foreach_learner(betas_tensor_to_float)
             )
+
+    algo = config.build()
+    #algo.restore(checkpoint_path)
+
+    #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
+    algo.restore(checkpoint_load_dir)
     
-    ray.tune.run(
-        "SAC",
-        name="orca",
-        stop={"num_env_steps_sampled_lifetime": steps_to_train},
-        config=config,
-        resume=False,
-        checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True)
-    )
+    def betas_tensor_to_float(learner):
+        for param_grp_key in learner._optimizer_parameters.keys():
+            param_grp = param_grp_key.param_groups[0]
+            param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+
+    algo.learner_group.foreach_learner(betas_tensor_to_float)
+    
+    iteration = 0
+    checkpoint = 0
+    iterations_per_checkpoint = 10
+    while True:
+        result = algo.train()
+        iteration += 1
+        print(f"Iteration {iteration} complete")
+        if (iteration % iterations_per_checkpoint == 0):
+            checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
+            algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
+            print(f"Saved checkpoint to {checkpoint_dir}")
+            checkpoint += 1
+    
+    #algo = SAC.from_checkpoint(os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021")
+    # ray.tune.run(
+    #     "SAC",
+    #     name="orca",
+    #     stop={"num_env_steps_sampled_lifetime": steps_to_train},
+    #     config=config,
+    #     restore=os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021",
+    #     #resume=True,
+    #     checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True),
+
+    # )
     
     # trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
     # trials_results = exp.results_df # Returns a df in which each row represents a trial, and contains aggregate/summary information about it. Used for scalar plots.
@@ -234,3 +268,4 @@ if __name__ == '__main__':
     # for trial_id, trial_df in trials_dfs.items():
     #     print(f"Creating plot for trial {trial_id}")
     #     eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
+    
