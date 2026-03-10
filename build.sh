@@ -68,9 +68,9 @@ then
 	fi
 
 # Check for invalid feature #todo: remove this? New users should not need to modify the build script to get their feature built
-if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ] && [ "$feature" != "JAMESCC" ]
+if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ] && [ "$feature" != "JAMESCC" ] && [ "$feature" != "CLEANSLATE" ]
 then
-	echo "-f option value not recognised. Select among CARTPOLE or ORCA"
+	echo "-f option value not recognised."
 	echo "Build failed."	
 	exit 1  
 	fi

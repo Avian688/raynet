@@ -8,7 +8,7 @@
 
 // Define the types for observation, action and reward.
 
-#if !defined(RLRDP) && !defined(CARTPOLE) && !defined(ORCA) && !defined(JAMESCC)
+#if !defined(RLRDP) && !defined(CARTPOLE) && !defined(ORCA) && !defined(JAMESCC) && !defined(CLEANSLATE)
 #define CARTPOLE
 #endif
 
@@ -34,6 +34,13 @@ typedef float ActionType;
 #endif
 
 #ifdef ORCA
+typedef std::tuple<double, double, double, double, double, double, double> ObsType;
+typedef float RewardType;
+typedef float ActionType;
+#endif
+
+
+#ifdef CLEANSLATE
 typedef std::tuple<double, double, double, double, double, double, double> ObsType;
 typedef float RewardType;
 typedef float ActionType;
