@@ -1,7 +1,8 @@
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
-#include "transportlayer/tcp/flavours/TcpCubic.h"
+#include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
+#include "transportlayer/tcp/flavours/TcpPacedFamily.h"
 #include <numeric>
 #ifdef CLEANSLATE
 #include "CleanSlate.h"
@@ -15,7 +16,7 @@ using namespace learning;
 Register_Class(CleanSlate); // Lets omnet see and use this class
 
 CleanSlate::CleanSlate():
-    TcpCubic(), RLInterface() {
+    TcpNoCongestionControl(), RLInterface() {
     if (debug) cout << "\tCleanSlate: Constructor called!";
 }
 
@@ -25,199 +26,6 @@ CleanSlate::~CleanSlate() {
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
     
 }
-
-// Override receivedDataAck from TcpCubic to remove default pacing behaviour (pacing rate should only change once per monitor interval!')
-void CleanSlate::receivedDataAck(uint32_t firstSeqAcked) {
-    TcpTahoeRenoFamily::receivedDataAck(firstSeqAcked);
-    state->delay_min = state->srtt.inUnit(SIMTIME_US);
-    // Check if recovery phase has ended
-    if (state->sack_enabled && state->lossRecovery) {
-        //dynamic_cast<PacedTcpConnection*>(conn)->changeIntersendingTime(0.000000001);
-        // RFC 3517, page 7: "Once a TCP is in the loss recovery phase the following procedure MUST
-        // be used for each arriving ACK:
-        //
-        // (A) An incoming cumulative ACK for a sequence number greater than
-        // RecoveryPoint signals the end of loss recovery and the loss
-        // recovery phase MUST be terminated.  Any information contained in
-        // the scoreboard for sequence numbers greater than the new value of
-        // HighACK SHOULD NOT be cleared when leaving the loss recovery
-        // phase."
-        if (seqGE(state->snd_una, state->recoveryPoint)) {
-            EV_INFO << "Loss Recovery terminated.\n";
-            state->snd_cwnd = state->ssthresh;
-            state->lossRecovery = false;
-        }
-        else{
-            dynamic_cast<TcpPacedConnection*>(conn)->doRetransmit();
-            //conn->setPipe();
-            //if (((int)state->snd_cwnd - (int)state->pipe) >= (int)state->snd_mss) // Note: Typecast needed to avoid prohibited transmissions
-            //    dynamic_cast<TcpPacedConnection*>(conn)->sendDataDuringLossRecoveryPhase(state->snd_cwnd);
-        }
-        conn->emit(sndUnaSignal, state->snd_una);
-        conn->emit(recoveryPointSignal, state->recoveryPoint);
-
-        if(state->snd_cwnd >= state->ssthresh) {
-            this->first_slowstart_complete=true;
-        }
-    }
-
-    if (state->snd_cwnd < state->ssthresh) {
-        EV_INFO << "cwnd <= ssthresh: Slow Start: increasing cwnd by one SMSS bytes to ";
-
-        // perform Slow Start. RFC 2581: "During slow start, a TCP increments cwnd
-        // by at most SMSS bytes for each ACK received that acknowledges new data."
-        state->snd_cwnd += state->snd_mss;
-        conn->emit(cwndSignal, state->snd_cwnd);
-        conn->emit(ssthreshSignal, state->ssthresh);
-
-        EV_INFO << "cwnd=" << state->snd_cwnd << "\n";
-    }
-    else {
-
-        updateCubicCwnd(1);
-
-        if (state->cwnd_cnt >= state->cnt) {
-            state->snd_cwnd += state->snd_mss;
-            state->cwnd_cnt = 0;
-        }
-        else {
-            state->cwnd_cnt++;
-        }
-        conn->emit(cwndSignal, state->snd_cwnd);
-        conn->emit(ssthreshSignal, state->ssthresh);
-
-
-        EV_INFO << "cwnd > ssthresh: Congestion Avoidance: increasing cwnd linearly, to " << state->snd_cwnd << "\n";
-    }
-    // > pacing functionality removed from right here <
-    sendData(false);
-
-    conn->emit(cwndSegSignal, state->snd_cwnd / state->snd_mss);
-}
-
-// Override receivedDuplicateAck from TcpCubic to remove default pacing functionality (pacing rate should only change once per RLStep)
-void CleanSlate::receivedDuplicateAck()
-{
-    //TcpTahoeRenoFamily::receivedDuplicateAck();
-    state->delay_min = state->srtt.inUnit(SIMTIME_US);
-
-    bool isHighRxtLost = dynamic_cast<TcpPacedConnection*>(conn)->checkIsLost(state->snd_una+state->snd_mss);
-    bool rackLoss = dynamic_cast<TcpPacedConnection*>(conn)->checkRackLoss();
-    if ((rackLoss && !state->lossRecovery) || state->dupacks == state->dupthresh || (isHighRxtLost && !state->lossRecovery)) {
-        EV_INFO << "Reno on dupAcks == DUPTHRESH(=" << state->dupthresh << ": perform Fast Retransmit, and enter Fast Recovery:";
-
-        if (state->sack_enabled) {
-            // RFC 3517, page 6: "When a TCP sender receives the duplicate ACK corresponding to
-            // DupThresh ACKs, the scoreboard MUST be updated with the new SACK
-            // information (via Update ()).  If no previous loss event has occurred
-            // on the connection or the cumulative acknowledgment point is beyond
-            // the last value of RecoveryPoint, a loss recovery phase SHOULD be
-            // initiated, per the fast retransmit algorithm outlined in [RFC2581].
-            // The following steps MUST be taken:
-            //
-            // (1) RecoveryPoint = HighData
-            //
-            // When the TCP sender receives a cumulative ACK for this data octet
-            // the loss recovery phase is terminated."
-
-            // RFC 3517, page 8: "If an RTO occurs during loss recovery as specified in this document,
-            // RecoveryPoint MUST be set to HighData.  Further, the new value of
-            // RecoveryPoint MUST be preserved and the loss recovery algorithm
-            // outlined in this document MUST be terminated.  In addition, a new
-            // recovery phase (as described in section 5) MUST NOT be initiated
-            // until HighACK is greater than or equal to the new value of
-            // RecoveryPoint."
-            if (state->recoveryPoint == 0 || seqGE(state->snd_una, state->recoveryPoint)) { // HighACK = snd_una
-                state->recoveryPoint = state->snd_max; // HighData = snd_max
-                dynamic_cast<TcpPacedConnection*>(conn)->setSackedHeadLost();
-                dynamic_cast<TcpPacedConnection*>(conn)->updateInFlight();
-                state->lossRecovery = true;
-
-                recalculateSlowStartThreshold();
-                state->snd_cwnd = state->ssthresh + (3*state->snd_mss); // 20051129 (1)
-                EV_DETAIL << " recoveryPoint=" << state->recoveryPoint;
-
-                dynamic_cast<TcpPacedConnection*>(conn)->doRetransmit();
-            }
-        }
-        // RFC 2581, page 5:
-        // "After the fast retransmit algorithm sends what appears to be the
-        // missing segment, the "fast recovery" algorithm governs the
-        // transmission of new data until a non-duplicate ACK arrives.
-        // (...) the TCP sender can continue to transmit new
-        // segments (although transmission must continue using a reduced cwnd)."
-
-        // enter Fast Recovery
-        // "set cwnd to ssthresh plus 3 * SMSS." (RFC 2581)
-        conn->emit(cwndSignal, state->snd_cwnd);
-
-        EV_DETAIL << " set cwnd=" << state->snd_cwnd << ", ssthresh=" << state->ssthresh << "\n";
-
-        // Fast Retransmission: retransmit missing segment without waiting
-        // for the REXMIT timer to expire
-        // Do not restart REXMIT timer.
-        // Note: Restart of REXMIT timer on retransmission is not part of RFC 2581, however optional in RFC 3517 if sent during recovery.
-        // Resetting the REXMIT timer is discussed in RFC 2582/3782 (NewReno) and RFC 2988.
-
-        // RFC 3517, page 7: "(4) Run SetPipe ()
-        //
-        // Set a "pipe" variable  to the number of outstanding octets
-        // currently "in the pipe"; this is the data which has been sent by
-        // the TCP sender but for which no cumulative or selective
-        // acknowledgment has been received and the data has not been
-        // determined to have been dropped in the network.  It is assumed
-        // that the data is still traversing the network path."
-        //conn->setPipe();
-        // RFC 3517, page 7: "(5) In order to take advantage of potential additional available
-        // cwnd, proceed to step (C) below."
-        if (state->sack_enabled) {
-            if (state->lossRecovery) {
-                EV_INFO << "Retransmission sent during recovery, restarting REXMIT timer.\n";
-                restartRexmitTimer();
-            }
-        }
-
-        // try to transmit new segments (RFC 2581)
-    }
-    else if (state->dupacks > state->dupthresh) {
-        //
-        // Cubic: For each additional duplicate ACK received, increment cwnd by SMSS.
-        // This artificially inflates the congestion window in order to reflect the
-        // additional segment that has left the network
-        //
-        //state->snd_cwnd += state->snd_mss;
-        EV_DETAIL << "Cubic on dupAcks > DUPTHRESH(=" << state->dupthresh << ": Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
-
-        //conn->emit(cwndSignal, state->snd_cwnd);
-
-        // Note: Steps (A) - (C) of RFC 3517, page 7 ("Once a TCP is in the loss recovery phase the following procedure MUST be used for each arriving ACK")
-        // should not be used here!
-
-        // RFC 3517, pages 7 and 8: "5.1 Retransmission Timeouts
-        // (...)
-        // If there are segments missing from the receiver's buffer following
-        // processing of the retransmitted segment, the corresponding ACK will
-        // contain SACK information.  In this case, a TCP sender SHOULD use this
-        // SACK information when determining what data should be sent in each
-        // segment of the slow start.  The exact algorithm for this selection is
-        // not specified in this document (specifically NextSeg () is
-        // inappropriate during slow start after an RTO).  A relatively
-        // straightforward approach to "filling in" the sequence space reported
-        // as missing should be a reasonable approach."
-    }
-    // > Pacing removed from right here <
-    sendData(false);
-}
-
-// Called upon a valid ACK received (?); Grab the RTT measured and use it to update the current interval's average (may be faster to store all values and average at the end of the interval)
-void CleanSlate::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
-    TcpCubic::rttMeasurementComplete(tSent, tAcked);
-    double packetRTT = (tAcked-tSent).dbl();
-    this->cleanslateDelay = (this->cleanslateDelay * (double) rttReportCount + packetRTT) / (rttReportCount + 1);
-    this->rttReportCount += 1;
-}
-
-
 
 
 // // RayNet: Called to initalize the agent
@@ -235,7 +43,7 @@ void CleanSlate::initialize() {
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
     RLInterface::initialise();
-    TcpCubic::initialize();
+    TcpNoCongestionControl::initialize();
 
     // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments (perhaps use the IP of the host?)
     std::string s("CleanSlate");
@@ -252,9 +60,10 @@ void CleanSlate::initialize() {
 
 // OMNet Method? Called after component initialization is complete?
 void CleanSlate::established(bool active) {
+    state->snd_cwnd = 6000;
     if (debug) cout << "\tCleanSlate: established()" << endl;
-    TcpCubic::established(active);
-    dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
+    TcpNoCongestionControl::established(active);
+    //dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
     if (active) {
         std::string s("CleanSlate");
         setStringId(s);
@@ -271,15 +80,9 @@ void CleanSlate::established(bool active) {
 // Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
 ObsType CleanSlate::computeObservation(){
     if (debug) cout << "\tCleanSlate: computeObservation()" << endl; 
-    if (this->first_slowstart_complete == false) {
-        if (debug) cout << "First slowstart not complete - skipping obs" << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
-    }
-    if (done) {
-        cout << "Agent reported as done, skipping this obs" << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
-    }
-    dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
+    if (debug) cout << "\tCleanSlate: cwnd=" << state->snd_cwnd << endl;
+    
+    //dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
     double delta_snd_una = state->snd_una - this->last_snd_una;
     this->cleanslateIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
@@ -289,76 +92,84 @@ ObsType CleanSlate::computeObservation(){
     this->cleanslateMaxThroughput = std::max(this->cleanslateMaxThroughput, this->cleanslateThroughput);
 
     // Lossrate: What percentage of bytes sent this interval were retransmissions
-    this->cleanslateLossRate = 0.0;
-    if (this->retransmissionRate > 0.0) {  // Avoid division by 0
-        double transmissionRate = delta_snd_max/this->cleanslateIntervalDuration; // How many non-retransmits occurred this interval
-        this->cleanslateLossRate = this->retransmissionRate / (this->retransmissionRate + transmissionRate);
-    }
+    // this->cleanslateLossRate = 0.0;
+    // if (this->retransmissionRate > 0.0) {  // Avoid division by 0
+    //     double transmissionRate = delta_snd_max/this->cleanslateIntervalDuration; // How many non-retransmits occurred this interval
+    //     this->cleanslateLossRate = this->retransmissionRate / (this->retransmissionRate + transmissionRate);
+    // }
+
     // ACKed: How many bytes were ACKed this interval (basically raw goodput?)
     this->cleanslateACKTotal= delta_snd_una;
-    //this->maxACKTotal = std::max(this->maxACKTotal, this->cleanslateACKTotal);
+    this->maxACKTotal = std::max(this->maxACKTotal, this->cleanslateACKTotal);
 
     // SRTT: Smoothed round trip time. Already tracked by TCP.
     this->cleanslateSRTT = state->srtt.dbl();
+    if (this->cleanslateSRTT > 0.0) {
+        this->cleanslateMinDelay = std::min(this->cleanslateMinDelay, this->cleanslateSRTT);
+    }
 
     // CWND: Size of the congestion window. Already tracked by TCP.
     this->cleanslateCwnd = (double) state->snd_cwnd;
     this->maxCwnd = std::max(this->maxCwnd, this->cleanslateCwnd);
-    
-    // Delay: Tracked in overridden method above. Only update the minimum if delay reports were received this interval.
-    if (this->rttReportCount > 0) {
-        this->cleanslateMinDelay = std::min(this->cleanslateMinDelay, this->cleanslateDelay);
-    }
 
     // Delay Metric: The delay metric is treated as optimal if within the forgiveness window. Otherwise, have it slowly decrease as delay inflates.
-    this->cleanslateDelayMetric = 1.0;
-    if (this->cleanslateDelay > this->cleanslateMinDelay * this->rewardDelayForgiveness) {                                             
-        this->cleanslateDelayMetric = this->cleanslateMinDelay * this->rewardDelayForgiveness / state->srtt;
-    }
-    
-    if (this->cleanslateACKTotal == 0 || done) {
-        if (debug) cout << "No packets ACKed. Skipping this observation." << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
+    this->cleanslateDelayMetric = 1.0; 
+    if (this->cleanslateSRTT > this->cleanslateMinDelay * this->rewardDelayForgiveness) {                                   
+        this->cleanslateDelayMetric = this->cleanslateMinDelay * this->rewardDelayForgiveness / this->cleanslateSRTT;
     }
 
-    // Should be:
-    //      Throughput/max_bw
-    //      Pace_rate/max_bw
-    //      loss_rate/max_bw
-    //      ACKs/cwnd
-    //      interval_time (raw)
-    //      min_rtt/srtt
-    //      relaxed_min_rtt/srtt (1 if within delay margin)
+    if(debug) {
+        cout << "-" << endl;
+        cout << "-" << endl;
+        cout << "\t\tState:" << endl;
+            cout << "\t\t\tsnd_una: " << state->snd_una << endl;
+            cout << "\t\t\tdelta_snd_una: " << delta_snd_una << endl;
+            cout << "\t\t\tcwnd: " << state->snd_cwnd << endl;
+            cout << "\t\t\tsnd_max: " << state->snd_max << endl;
+        cout << "\t\tObservations:" << endl;
+            cout << "\t\t\tThroughput: " << this->cleanslateThroughput / this->cleanslateMaxThroughput << endl;
+            cout << "\t\t\tPacerate: " << this->cleanslatePaceRate / this->cleanslateMaxThroughput << endl;
+            cout << "\t\t\tlossrate: " << -9 << endl;
+            cout << "\t\t\tACKs: " << this->cleanslateACKTotal /  state->snd_cwnd << endl;
+            cout << "\t\t\tMTP Duration: " << this->cleanslateIntervalDuration << endl;
+            cout << "\t\t\tSRTT: " << this->cleanslateMinDelay / this->cleanslateSRTT << endl;
+            cout << "\t\t\tDelay Metric: " << this->cleanslateDelayMetric  << endl;
+        
+    } 
 
+    if (state->srtt.dbl() == 0) {
+        return {0,0,0,0,0,0,0}; // Schedule the next RLStep
+    }
     return {this->cleanslateThroughput / this->cleanslateMaxThroughput,     // Normalized throughput
             this->cleanslatePaceRate / this->cleanslateMaxThroughput,       // Normalized pacerate
-            this->retransmissionRate / this->cleanslateMaxThroughput, // Normalized lossrate
+            -9, // Normalized lossrate
             this->cleanslateACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
             this->cleanslateIntervalDuration,                         // Monitor interval duration
             this->cleanslateMinDelay / this->cleanslateSRTT,                // Normalized SRTT (delay)
             this->cleanslateDelayMetric                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
         };
 
-    // return {this->cleanslateThroughput / this->cleanslateMaxThroughput,
-    //         this->cleanslateLossRate, // Loss rate, normalized as percentage of bits sent. Max to prevent division by 0.
-    //         this->cleanslateDelay / this->cleanslateMinDelay,
-    //         std::log(this->cleanslateACKTotal + 1), 
-    //         this->cleanslateIntervalDuration, 
-    //         this->cleanslateSRTT / this->cleanslateMinDelay, 
-    //         std::log(this->cleanslateCwnd + 1),                // maybe should do    this->cleanslateCwnd / this->maxCwnd,
-    //         std::log(this->cleanslateMaxThroughput + 1),       // log to scale values to reasonable range. +1e-6 to prevent log(0)
-    //         this->cleanslateMinDelay
+    // return {delta_snd_una,                      // Throughput (number of bytes acked)
+    //         this->cleanslateMaxThroughput,      // Max observed throughtput (number of bytes acked)   
+    //         state->snd_cwnd,                    // Current cwnd
+    //         this->maxCwnd,                      // Max observed cwnd
+    //         state->srtt.dbl(),                  // current srtt
+    //         this->cleanslateMinDelay,           // Min SRTT observed 
+    //         this->cleanslateIntervalDuration,   // Monitor interval duration
     //     };
 }
 
 RewardType CleanSlate::computeReward(){
     if (debug) cout << "\tCleanSlate: computeReward()" << endl;
+    if (state->srtt.dbl() == 0) {
+        return 0; // Schedule the next RLStep
+    }
     // Do not compute a reward if no ACKs were received. No ACKs means no throughput, no valid RTT measurement, etc.
     // Currently this just returns a 0 reward. TODO: Find a way to skip the RLStep altogether.
     // Note to self - maybe just don't return reward/obs, and instead schedule a new event? Something the upper layers won't see.
-    if (this->rttReportCount == 0 || done || !this->first_slowstart_complete) {
-        return RewardType(0.0);
-    }
+    // if (this->rttReportCount == 0 || done || !this->first_slowstart_complete) {
+    //     return RewardType(0.0);
+    // }
     // // Reward calculation: Reward the agent based on their proximity to the optimal throughput/delay ratio. (power)
     //     // Delay: If the measured delay is within some forgiveness window, then it does not negatively impact reward. Forgiveness window determined by rewardDelayForgiveness.
     //     // Loss: Loss directly subtracts from the rewards gained from thoughput. Strength of effect determined by rewardLossMultiplier.
@@ -372,32 +183,41 @@ RewardType CleanSlate::computeReward(){
     // double normalizedPower = currentPower / optimalPower; // How close this reward is to optimal. (0 is worst, 1 is optimal)
     // return RewardType(normalizedPower);
 
-    return( (this->cleanslateThroughput-(this->rewardLossMultiplier*this->cleanslateLossRate))/this->cleanslateMaxThroughput*this->cleanslateDelayMetric);
+    return(this->cleanslateThroughput/this->cleanslateMaxThroughput*this->cleanslateDelayMetric);
+    //return(this->cleanslateThroughput/state->srtt);
 }
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void CleanSlate::decisionMade(ActionType action) {
-    scheduleNextStep(state->srtt.dbl()); // Schedule the next RLStep
     if (debug) cout << "\tCleanSlate: decisionMade()" << endl;
+    
     RLStepsTaken++;
     if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
     if (RLStepsTaken >= this->maxRLSteps) {
             if (debug) cout << "\t\tWE ARE DONE! " << RLStepsTaken << " STEPS TAKEN!" << endl;
             done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
     }
-    if (this->cleanslateACKTotal == 0) {
-        if (debug) cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
-        return;
-    } 
+
+    if (state->srtt.dbl() == 0) {
+        scheduleNextStep(this->initialStepLength); // Schedule the next RLStep
+    } else {
+        scheduleNextStep(this->initialStepLength);
+        //scheduleNextStep(state->srtt.dbl()); // Schedule the next RLStep
+    }
+    // if (this->cleanslateACKTotal == 0) {
+    //     if (debug) cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
+    //     return;
+    // } 
 
     // Avoid taking actions until initial slowstart is complete
-    if (this->first_slowstart_complete == false) {
-        if (debug) cout << "Currently in slow start. CleanSlate will not apply any action.";
-        return;
-    }
+    // if (this->first_slowstart_complete == false) {
+    //     if (debug) cout << "Currently in slow start. CleanSlate will not apply any action.";
+    //     return;
+    // }
         double fakeAction = action;
         uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
-        newCwnd =  max(state->snd_mss, newCwnd);
+        newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
+        newCwnd = max(state->snd_max - state->snd_una, newCwnd); // cwnd should not deflate below in flight bytes
         // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
         if (newCwnd < 1000000) {
             if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
@@ -409,8 +229,9 @@ void CleanSlate::decisionMade(ActionType action) {
         
         // cout << "srtt: " << state->srtt.dbl() << endl;
         // cout << "interSendTime: " << newIntersendingTime << endl;
-        cleanslatePaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
-        if (takeActions) dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/cleanslatePaceRate); // Time between bytes
+        
+        //cleanslatePaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
+        //if (takeActions) dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/cleanslatePaceRate); // Time between bytes
 
         // Change the stepSize to be 1 RTT (based on srtt)
         // cObject* newStepSizeObj = new cSimTime(state->srtt.dbl());
@@ -422,14 +243,10 @@ void CleanSlate::decisionMade(ActionType action) {
 
 void CleanSlate::resetStepVariables()
 {
-    if (debug) cout << "\t\tCleanSlate: resetStepVariables()" << endl;
-    this->cleanslateThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    this->cleanslateLossRate=0.0;      // The average loss rate of packets over the last interval
-    this->cleanslateDelay=0.0;         // The average delay of packets over the last interval
-    this->cleanslateACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    this->cleanslateIntervalDuration=0.0;  // The simtime elapsed over the last interval
-
-    this->rttReportCount=0; // The number of RTT values we have measured over the last interval
+    if (debug) cout << "\tCleanSlate: resetStepVariables()" << endl;
+    if (state->srtt.dbl() == 0) {
+        return; // Skipping a step, dont reset step variables
+    }
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->lastIntervalTime = simTime();

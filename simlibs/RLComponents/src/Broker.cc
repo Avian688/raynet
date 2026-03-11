@@ -17,23 +17,27 @@ void Broker::initialize()
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
     getSimulation()->getSystemModule()->subscribe("obsResponse", this); //suscribe to the broker's signal
-    getSimulation()->getSystemModule()->subscribe("modifyStepSize", this);// used to modify the size of the step for an agent
+    getSimulation()->getSystemModule()->subscribe("modifyStepSize", this);// used to modify the size of the step used by Stepper
 }
 
 // Clean up this component. Called at the end of the simulation.
 void Broker::finish(){
-    // Cancel and delete any remaining STEP events
+    // Cancel and delete any remaining STEP or EOS events
     for (auto& it: activeAgents) {
         if (it.second.stepMsg->isScheduled()) {
             cancelEvent(it.second.stepMsg);
             take(it.second.stepMsg);
         }
+        if (it.second.endOfStep->isScheduled()) {
+            cancelEvent(it.second.endOfStep);
+        }
         delete it.second.stepMsg;
+        delete it.second.endOfStep;
     }
     getSimulation()->getSystemModule()->unsubscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->unsubscribe("unregisterAgent", this);// used to unregister stepping agents
     getSimulation()->getSystemModule()->unsubscribe("obsResponse", this); //suscribe to the broker's signal
-    getSimulation()->getSystemModule()->unsubscribe("modifyStepSize", this);// used to modify the size of the step for an agent
+    getSimulation()->getSystemModule()->unsubscribe("modifyStepSize", this);// used to modify the size of the step used by Stepper
 }
 
 /*
@@ -47,6 +51,9 @@ void Broker::handleMessage(cMessage *msg)
     if (messageName.find("STEP-") != std::string::npos) {
         std::string agentID = messageName.substr(messageName.find("-")+1);
         emit(this->obsRequestSig, agentID.c_str()); 
+    } else if (messageName.find("EOS-") != std::string::npos) {
+        std::string agentID = messageName.substr(messageName.find("-")+1);
+        EV_TRACE << "EOS event detected, doing nothing. "<< agentID << std::endl;
     }
 }
 
@@ -70,6 +77,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         BrokerDetails details;
         details.rlId = id;
         details.isReset = true;
+        details.endOfStep = new cMessage((std::string("EOS-") + id).c_str()); // Name of the message should match EOS-<ID>
         details.stepMsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
 
         //Inserting new agent details into map (but do not schedule it yet!)
@@ -78,20 +86,26 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         //Get id
         std::string id(value);
 
+        // BROKER PORTION -----------------------------------------------
         //Set done for agent to true and step right away
         activeAgents[id].done = true;
-
+        
+        if(activeAgents[id].endOfStep->isScheduled()) {
+            cancelEvent(activeAgents[id].endOfStep);
+        }
         if (activeAgents[id].stepMsg->isScheduled()){
             cancelEvent(activeAgents[id].stepMsg);
             take(activeAgents[id].stepMsg);
         }
         delete activeAgents[id].stepMsg;
-
+        // Schedule an EOS message for the specific agent.
+        scheduleAt(simTime(), activeAgents[id].endOfStep);
         activeAgents.erase(id);
         //Check if all agents are done and store in variable for SimulationRunner
         this->allAgentsDone = areAllAgentsDone();
     } else if (strcmp(signalName, "modifyStepSize") == 0) {
-        // schedule a new step event
+        // STEPPER: schedule a new step event
+        //Get id
         std::string id(value);
 
         if(activeAgents[id].stepMsg->isScheduled()){
@@ -126,6 +140,12 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
                 activeAgents[id].reward = agentData->getReward();
                 activeAgents[id].done = agentData->getDone();
             }
+            // Schedule the end of this step
+            if(activeAgents[id].endOfStep->isScheduled()) { 
+                cancelEvent(activeAgents[id].endOfStep); // cancel any existing EOS for this agent, just in case
+            }
+            scheduleAt(simTime(), activeAgents[id].endOfStep);
+            EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
         }
         
         // Cleanup

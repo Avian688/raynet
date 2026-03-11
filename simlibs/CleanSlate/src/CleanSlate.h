@@ -20,14 +20,15 @@
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
-#include <transportlayer/tcp/flavours/TcpCubic.h>
+#include <inet/transportlayer/tcp/flavours/DumbTcp.h>
+#include <inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h>
 
 using namespace omnetpp;
 using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class CleanSlate : public TcpCubic, public RLInterface
+class CleanSlate : public TcpNoCongestionControl, public RLInterface
 {
 protected:
     // am I running on active open (client) or passive open connection (server)
@@ -51,17 +52,14 @@ public: // General use
     using RLInterface::receiveSignal;
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, double value, cObject *details) override 
     {
-      TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
-      if (signalID == pacedConn->retransmissionRateSignal) {
-        retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
-      } 
+      // TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
+      // if (signalID == pacedConn->retransmissionRateSignal) {
+      //   retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
+      // } 
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
-    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
-    virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
-    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
 
     // RLInterface Overrides (Required by the RL agent)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
@@ -88,7 +86,6 @@ public: // General use
     // CleanSlate observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double cleanslateThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     double cleanslateLossRate=0.0;      // The average loss rate of packets over the last interval
-    double cleanslateDelay=0.0;         // The average delay of packets over the last interval
     double cleanslateACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     double cleanslateIntervalDuration=0.0;  // The simtime elapsed over the last interval
     double cleanslateSRTT=0.0;          // The smoothed RTT of (all?) packets so far

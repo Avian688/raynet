@@ -47,7 +47,6 @@ class OmnetGymApiEnv(gym.Env):
         # Define the action space (possible values for actions)
         self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
-
         # Define the observation space (expected values/types for each observation feature)
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
@@ -189,10 +188,10 @@ if __name__ == '__main__':
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
     max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
-    minimum_rtt_range = (5, 5)                     
+    minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_11-30-01ifnnidtm/checkpoints/checkpoint_8"
     steps_to_train = 5000000
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
@@ -217,7 +216,6 @@ if __name__ == '__main__':
             #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             # .build_algo()
             )
-
     algo = config.build()
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
@@ -245,8 +243,7 @@ if __name__ == '__main__':
             algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
             print(f"Saved checkpoint to {checkpoint_dir}")
             checkpoint += 1
-    
-    
+
     # old -------------------------------
     #algo = SAC.from_checkpoint(os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021")
     # ray.tune.run(
@@ -269,4 +266,3 @@ if __name__ == '__main__':
     # for trial_id, trial_df in trials_dfs.items():
     #     print(f"Creating plot for trial {trial_id}")
     #     eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
-    

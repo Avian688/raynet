@@ -1,7 +1,7 @@
 package CleanSlate;
-import tcppaced.transportlayer.tcp.TcpPaced;
+import inet.transportlayer.tcp.Tcp;
 
-simple CleanSlateTcp extends TcpPaced
+simple CleanSlateTcp extends Tcp
 {
     parameters:
         @class(CleanSlateTcp);
@@ -17,7 +17,6 @@ simple CleanSlateTcp extends TcpPaced
         bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
         int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
         double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
-        double delayWeight = default(5);                  // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
 }
