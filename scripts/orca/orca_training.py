@@ -180,8 +180,9 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env = "OmnetGymApiEnv"
-    num_workers = 13 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    env_name = "Orca"
+    register_env(env_name, omnetgymapienv_creator)
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
@@ -208,7 +209,7 @@ if __name__ == '__main__':
             .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
             .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
-            .environment(env, env_config=env_config) # "OmnetGymApiEnv
+            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
             .training(store_buffer_in_checkpoints=True)
             #.training(optimizer={"foreach": False, "capturable": True})
             ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")

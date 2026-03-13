@@ -245,6 +245,13 @@ void Orca::initialize() {
     cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
     owner->emit(this->registerSig, stringId.c_str(), simtime); 
     scheduleNextStep(this->initialStepLength);
+
+    // Register metric signals (for plotting)
+    throughputSignal = owner->registerSignal("throughput");
+    srttSignal = owner->registerSignal("srtt");
+    pacerateSignal = owner->registerSignal("pacerate");
+    intervalDurationSignal = owner->registerSignal("intervalDuration");
+    
     // Schedule the first RL step
     // RLStep = new cMessage("RLSTEP");
     // conn->scheduleAt(simTime() + RLStepInterval, RLStep);
@@ -269,15 +276,17 @@ void Orca::established(bool active) {
 
 
 // Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
-ObsType Orca::computeObservation(){
+std::optional<ObsType> Orca::computeObservation(){
     if (debug) cout << "\tOrca: computeObservation()" << endl; 
     if (this->first_slowstart_complete == false) {
         if (debug) cout << "First slowstart not complete - skipping obs" << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
+        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
+        return ObsType{0, 0, 0, 0, 0, 0, 0};
     }
     if (done) {
         cout << "Agent reported as done, skipping this obs" << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
+        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
+        return ObsType{0, 0, 0, 0, 0, 0, 0};
     }
     dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
@@ -318,19 +327,21 @@ ObsType Orca::computeObservation(){
     
     if (this->orcaACKTotal == 0 || done) {
         if (debug) cout << "No packets ACKed. Skipping this observation." << endl;
-        return {0, 0, 0, 0, 0, 0, 0};
+        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
+        return ObsType{0, 0, 0, 0, 0, 0, 0};
     }
 
-    // Should be:
-    //      Throughput/max_bw
-    //      Pace_rate/max_bw
-    //      loss_rate/max_bw
-    //      ACKs/cwnd
-    //      interval_time (raw)
-    //      min_rtt/srtt
-    //      relaxed_min_rtt/srtt (1 if within delay margin)
+    throughputSignal = owner->registerSignal("throughput");
+    srttSignal = owner->registerSignal("srtt");
+    pacerateSignal = owner->registerSignal("pacerate");
+    intervalDurationSignal = owner->registerSignal("intervalDuration");
 
-    return {this->orcaThroughput / this->orcaMaxThroughput,     // Normalized throughput
+    owner->emit(throughputSignal, this->orcaThroughput);
+    owner->emit(srttSignal, state->srtt);
+    owner->emit(pacerateSignal, this->orcaPaceRate);
+    owner->emit(intervalDurationSignal, this->orcaIntervalDuration);
+
+    return ObsType{this->orcaThroughput / this->orcaMaxThroughput,     // Normalized throughput
             this->orcaPaceRate / this->orcaMaxThroughput,       // Normalized pacerate
             this->retransmissionRate / this->orcaMaxThroughput, // Normalized lossrate
             this->orcaACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
@@ -338,17 +349,6 @@ ObsType Orca::computeObservation(){
             this->orcaMinDelay / this->orcaSRTT,                // Normalized SRTT (delay)
             this->orcaDelayMetric                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
         };
-
-    // return {this->orcaThroughput / this->orcaMaxThroughput,
-    //         this->orcaLossRate, // Loss rate, normalized as percentage of bits sent. Max to prevent division by 0.
-    //         this->orcaDelay / this->orcaMinDelay,
-    //         std::log(this->orcaACKTotal + 1), 
-    //         this->orcaIntervalDuration, 
-    //         this->orcaSRTT / this->orcaMinDelay, 
-    //         std::log(this->orcaCwnd + 1),                // maybe should do    this->orcaCwnd / this->maxCwnd,
-    //         std::log(this->orcaMaxThroughput + 1),       // log to scale values to reasonable range. +1e-6 to prevent log(0)
-    //         this->orcaMinDelay
-    //     };
 }
 
 RewardType Orca::computeReward(){

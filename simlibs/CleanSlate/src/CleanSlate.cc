@@ -1,7 +1,7 @@
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
-#include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
+#include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include "transportlayer/tcp/flavours/TcpPacedFamily.h"
 #include <numeric>
 #include <optional>
@@ -17,7 +17,7 @@ using namespace learning;
 Register_Class(CleanSlate); // Lets omnet see and use this class
 
 CleanSlate::CleanSlate():
-    TcpNoCongestionControl(), RLInterface() {
+    TcpNewReno(), RLInterface() {
     if (debug) cout << "\tCleanSlate: Constructor called!";
 }
 
@@ -44,7 +44,7 @@ void CleanSlate::initialize() {
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
     RLInterface::initialise();
-    TcpNoCongestionControl::initialize();
+    TcpNewReno::initialize();
 
     // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments (perhaps use the IP of the host?)
     std::string s("CleanSlate");
@@ -63,7 +63,7 @@ void CleanSlate::initialize() {
 void CleanSlate::established(bool active) {
     state->snd_cwnd = 6000;
     if (debug) cout << "\tCleanSlate: established()" << endl;
-    TcpNoCongestionControl::established(active);
+    TcpNewReno::established(active);
     //dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
     if (active) {
         std::string s("CleanSlate");
