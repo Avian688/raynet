@@ -29,7 +29,7 @@ using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class CleanSlate : public TcpNewReno, public RLInterface
+class CleanSlate : public TcpNoCongestionControl, public RLInterface
 {
 protected:
     // am I running on active open (client) or passive open connection (server)
@@ -40,10 +40,9 @@ protected:
     //Signals for result recording
     simsignal_t throughputSignal;
     simsignal_t actionSignal;
-    simsignal_t dupAcksSignal;
-    simsignal_t rttGradientSignal;
-    simsignal_t tickSignal;
-    simsignal_t miQueueSizeSignal;
+    simsignal_t srttSignal;
+    simsignal_t cwndSignal;
+    simsignal_t intervalDurationSignal;
     uint32_t dupAcks;
 public: // General use
     CleanSlate();

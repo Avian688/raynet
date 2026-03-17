@@ -14,6 +14,7 @@ import os
 import subprocess
 import re
 import time as termTime
+import numpy as np
 
 def parse_if_number(s):
     try: return float(s)
@@ -50,9 +51,13 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title("Plot from CSV")
+    plt.ylim(bottom=0)
+    plt.yscale("linear")
+    plt.ticklabel_format(style='plain', axis='y')
     plt.xlim(left=0)
     plt.grid(True)
     plt.tight_layout()
+    
     
     export_dir = csv_file.rsplit("/", 1)[0]
     pdf_path = export_dir + f"/{output_name}.pdf"
@@ -60,11 +65,11 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
     plt.savefig(pdf_path)
 
 if __name__ == "__main__":
-    filePath = os.getenv('HOME') + "/raynet/configs/orca/results/output.csv"
+    filePath = os.getenv('HOME') + "/raynet/_experiments/experiment1/results/output.csv"
     exp = "Dumbbell"
-    protocol = "Orca"
+    protocol = "CleanSlate"
     argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "pacerate", "intervalDuration"]
+    vectorsToExtract = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
     extracted = False
     
     # for arg in sys.argv[1:]:

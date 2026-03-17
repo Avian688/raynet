@@ -34,7 +34,7 @@ int main(int argc, char **argv){
    
    
    
-    gymapi->initialise(_iniPath);
+    gymapi->initialise(_iniPath, "General");
     auto id_obs = gymapi->reset();
 
     std::vector<std::string> keys;

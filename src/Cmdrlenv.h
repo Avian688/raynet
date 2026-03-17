@@ -29,7 +29,7 @@ class Cmdrlenv : public Cmdenv
   public:
     Cmdrlenv();
     // Set up the simulation
-    void initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject);
+    void initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject, std::string sectionName);
     // Execute events until the next step event
     std::string step(ActionType action, bool isReset);
     std::string step(std::unordered_map<std::string, ActionType>  actions, bool isReset);

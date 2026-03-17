@@ -1,7 +1,7 @@
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
-#include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
+#include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
 #include "transportlayer/tcp/flavours/TcpPacedFamily.h"
 #include <numeric>
 #include <optional>
@@ -17,7 +17,7 @@ using namespace learning;
 Register_Class(CleanSlate); // Lets omnet see and use this class
 
 CleanSlate::CleanSlate():
-    TcpNewReno(), RLInterface() {
+    TcpNoCongestionControl(), RLInterface() {
     if (debug) cout << "\tCleanSlate: Constructor called!";
 }
 
@@ -44,7 +44,7 @@ void CleanSlate::initialize() {
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
     RLInterface::initialise();
-    TcpNewReno::initialize();
+    TcpNoCongestionControl::initialize();
 
     // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments (perhaps use the IP of the host?)
     std::string s("CleanSlate");
@@ -63,13 +63,18 @@ void CleanSlate::initialize() {
 void CleanSlate::established(bool active) {
     state->snd_cwnd = 6000;
     if (debug) cout << "\tCleanSlate: established()" << endl;
-    TcpNewReno::established(active);
+    TcpNoCongestionControl::established(active);
     //dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
     if (active) {
         std::string s("CleanSlate");
         setStringId(s);
         this->isActive = active;
     }
+    throughputSignal = conn->registerSignal("throughput");
+    srttSignal = conn->registerSignal("srtt");
+    cwndSignal = conn->registerSignal("cwnd");
+    intervalDurationSignal = conn->registerSignal("intervalDuration");
+    actionSignal = conn->registerSignal("action");
 }
 
 
@@ -144,6 +149,11 @@ std::optional<ObsType> CleanSlate::computeObservation(){
         cout << "-" << endl;
     } 
 
+    conn->emit(throughputSignal, this->cleanslateThroughput);
+    conn->emit(srttSignal, state->srtt);
+    conn->emit(cwndSignal, state->snd_cwnd);
+    conn->emit(intervalDurationSignal, this->cleanslateIntervalDuration);
+
     scheduleNextStep(state->srtt.dbl());
     return ObsType{this->cleanslateThroughput / this->cleanslateMaxThroughput,     // Normalized throughput
             this->cleanslateACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
@@ -186,6 +196,7 @@ void CleanSlate::decisionMade(ActionType action) {
     newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
     // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
     if (newCwnd < 1000000) {
+        conn->emit(actionSignal, ceil(std::pow(2.0, fakeAction)));
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
         if (takeActions) state->snd_cwnd = newCwnd;
     }

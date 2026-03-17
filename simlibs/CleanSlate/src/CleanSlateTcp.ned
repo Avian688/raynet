@@ -19,4 +19,16 @@ simple CleanSlateTcp extends Tcp
         double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
+
+
+        @signal[throughput];
+        @signal[srtt];
+        @signal[action];
+        @signal[intervalDuration];
+        @signal[cwnd];
+        @statistic[cwnd](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[throughput](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[srtt](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[action](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[intervalDuration](record=vector(removeRepeats); interpolationmode=sample-hold);
 }

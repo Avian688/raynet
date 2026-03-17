@@ -13,7 +13,7 @@ inline bool elapsed(long millis, int64_t& since)
     return ret;
 }
 
-void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject){
+void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject, std::string sectionName){
     cout << "Cmdrlenv::initialiseEnvironment()------------------------" << endl;
     opt = static_cast<CmdenvOptions*>(createOptions());
 
@@ -31,10 +31,12 @@ void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *con
         // (NOTE: inifile settings *already* got read at this point! as EnvirBase::setup()
         // invokes readOptions()).
 
-        if (args->optionGiven('c'))  // note: do not overwrite value from cmdenv-config-name option
-            opt->configName = args->optionValue('c');
-        if (opt->configName.empty())
-            opt->configName = "General";
+        opt->configName = sectionName; // Set the section name to 'General' or 'Orca' or whatever
+        cout << "CMDRLENV using sectionName: " << sectionName << endl;
+        // if (args->optionGiven('c'))  // note: do not overwrite value from cmdenv-config-name option
+        //     opt->configName = args->optionValue('c');
+        // if (opt->configName.empty())
+        //     opt->configName = "General";
         if (args->optionGiven('r'))  // note: do not overwrite value from cmdenv-runs-to-execute option!
             opt->runFilter = args->optionValue('r');
 

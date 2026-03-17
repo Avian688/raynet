@@ -30,7 +30,7 @@ void GymApi::cleanupmemory(){
     // delete inifilePtr;
 }
 
-void GymApi::initialise(std::string _iniPath){
+void GymApi::initialise(std::string _iniPath, std::string sectionName){
     // initializations
     CodeFragments::executeAll(CodeFragments::STARTUP);
     SimTime::setScaleExp(-12);
@@ -44,6 +44,8 @@ void GymApi::initialise(std::string _iniPath){
     inifilePtr->readFile(_iniPath.c_str());
     // activate [General] section so that we can read global settings from it
     bootconfigptr->setConfigurationReader(inifilePtr);
+    //bootconfigptr->setActiveSection(sectionName.c_str());
+    
     for (auto l : getEnvir()->getLifecycleListeners()) {
         // Idea: rather than calling the staticEnvir that initially loads up, you may be calling the previous environment
             env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
@@ -52,7 +54,7 @@ void GymApi::initialise(std::string _iniPath){
     simulationPtr = new cSimulation("simulation", env);
     cSimulation::setActiveSimulation(simulationPtr);
     
-    env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr);
+    env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr, sectionName);
 }
 
 
