@@ -20,4 +20,14 @@ simple OrcaTcp extends TcpPaced
         double delayWeight = default(5);                  // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
+
+        // Statistics recording
+        @signal[throughput];
+        @signal[srtt];
+        @signal[pacerate];
+        @signal[intervalDuration];
+        @statistic[throughput](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[srtt](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[pacerate](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[intervalDuration](record=vector(removeRepeats); interpolationmode=sample-hold);
 }

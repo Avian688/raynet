@@ -154,7 +154,7 @@ class OmnetGymApiEnv(gym.Env):
             sim_truncated = True
         
         printFreq = 1
-        if self.step_count % printFreq == 0:
+        if self.step_count % printFreq == -1:
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
@@ -182,7 +182,7 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 if __name__ == '__main__':
     env_name = "Orca"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 13 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_11-30-01ifnnidtm/checkpoints/checkpoint_8"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.0/SAC_Orca_2026-03-13_14-42-05b6jzob3t/checkpoints/checkpoint_107"
     steps_to_train = 5000000
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,

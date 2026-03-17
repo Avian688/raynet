@@ -187,7 +187,7 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "InferenceTesting"
+    env_name = "OrcaInferenceTesting"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -198,12 +198,12 @@ if __name__ == '__main__':
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
-    load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_11-30-01ifnnidtm/checkpoints/checkpoint_8"
+    load_from_checkpoint = True
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.0/SAC_Orca_2026-03-13_14-42-05b6jzob3t/checkpoints/checkpoint_107"
     steps_to_train = 1000000
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca_eval.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
-                  "minimum_rtt_range": minimum_rtt_range,
+                  "minimum_rtt_range": minimum_rtt_range, 
                   "bottleneck_buffer_range": bottleneck_buffer_range,
                   "max_steps_range": max_steps_range}
     random.seed(seed)

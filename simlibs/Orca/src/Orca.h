@@ -29,7 +29,7 @@ using namespace learning;
 
 class Orca : public TcpCubic, public RLInterface
 {
-protected:
+public:
     // am I running on active open (client) or passive open connection (server)
     bool isActive;
 
