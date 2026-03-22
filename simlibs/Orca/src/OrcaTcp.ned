@@ -16,8 +16,9 @@ simple OrcaTcp extends TcpPaced
         bool printDebugMessages;                            // used to print debug messages
         bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
         int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
-        double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
-        double delayWeight = default(5);                  // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
+        bool fixedIntervals = default(true);         // If false, monitor intervals will adjust to SRTT dynamically
+        double fixedIntervalDuration = default(.1);         // How many seconds a fixed monitor interval should last. If not fixed, MTPs will be set to SRTT dynamically
+        double delayWeight = default(5);                    // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
 

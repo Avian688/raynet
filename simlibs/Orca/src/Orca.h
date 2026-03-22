@@ -30,7 +30,7 @@ using namespace learning;
 class Orca : public TcpCubic, public RLInterface
 {
 public:
-    // am I running on active open (client) or passive open connection (server)
+    // true if this is the client, false if server
     bool isActive;
 
     //Signals for result recording
@@ -52,7 +52,7 @@ public: // General use
       TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
       if (signalID == pacedConn->retransmissionRateSignal) {
         retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
-      } 
+      }
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
@@ -73,7 +73,6 @@ public: // General use
     virtual void cleanup() override;
 
     // RL-related and utility variables
-    double initialStepLength = 1.0; // How many simseconds to wait before scheduling the initial step. SRTT will be used for future step lengths.
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
@@ -87,19 +86,27 @@ public: // General use
     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     double orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     double orcaDelay=0.0;         // The average delay of packets over the last interval
+    double orcaDelaySum=0.0;      // Used to hold the current sum of reported delays over a given interval. Used to compute an average at the end.
     double orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    double orcaIntervalDuration=0.0;  // The simtime elapsed over the last interval
+    double fixedIntervalDuration;  // The simtime elapsed over the last interval
     double orcaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
     double orcaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double orcaMaxThroughput=.000001; // The maximum delivery rate so far
+    double orcaMaxThroughput=0.0; // The maximum delivery rate so far
     double orcaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
     double orcaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
     double orcaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
 
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
-    double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
+
+    // Changing state variables (store deltas as doubles to prevent constant casting lol)
+    double delta_snd_max;
+    double delta_snd_una;
+    double delta_ack_cnt;
+    uint32_t last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
     uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
+    uint32_t last_ack_cnt = 0;
+
     uint32_t bytesSentTotal = 0;
     uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
     // Old - to be removed
@@ -108,10 +115,10 @@ public: // General use
     double lastStepSent=0.0;    // How many packets were sent during the last step
     double lastStepSSThresh=0.0; // What was SSthresh last step
     double slowstartMultiplier=1; // The RL action: changes how quickly slow start increases CWND
-    double maxCwnd=1.0; // The max cwnd observed in an interval
-    double maxACKTotal=1.0; // The max ACK total observed in an interval
-    double retransmissionRate; // The most recent measurement of bytes retransmitted.
+    double retransmissionRate=0.0; // The most recent measurement of bytes retransmitted.
     bool first_slowstart_complete = false; // Do not take orca actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
+    bool fixedIntervals; // Dynamically adjust the interval duration to the SRTT
+    double bytesDelivered=0.0; // Sum of all bytes delivered this interval
   };
 #endif
 #endif

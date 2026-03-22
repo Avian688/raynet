@@ -60,6 +60,7 @@ void Broker::handleMessage(cMessage *msg)
 /*
     Agent registration/unregistration, and step size modification
     Adds/removes agents from the list of active agents, and schedules STEP events as requested.
+    TODO: Perform registration with a signal that does not include simtime? Currently unused.
 */
 void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj){
     Enter_Method("schedule a step event(self message)"); //need this for direct messaging. Allows us to call scheduleMessage from the sender(ownership).

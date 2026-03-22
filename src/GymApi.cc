@@ -7,12 +7,12 @@ GymApi::GymApi(){
 }
 
 void GymApi::cleanupmemory(){
-    if (getSimulation()!=nullptr) {
-        getSimulation()->deleteNetwork();
-        cSimulation::setActiveSimulation(nullptr);
-        delete simulationPtr; // deletes env as well
-    }
+    getSimulation()->deleteNetwork();
+    cSimulation::setActiveSimulation(nullptr);
+    delete simulationPtr;  // will delete app as well
+
     // CodeFragments::executeAll(CodeFragments::SHUTDOWN);
+    
     // cout << "GymApi.cc::cleanupmemory(): Manually removing all dead lifecyclelisteners from static env:" << endl;
     // int size = getEnvir()->listeners.size();
     // for (int listener = 0; listener < size; listener++) {
@@ -31,6 +31,7 @@ void GymApi::cleanupmemory(){
 }
 
 void GymApi::initialise(std::string _iniPath, std::string sectionName){
+    cStaticFlag dummy;
     // initializations
     CodeFragments::executeAll(CodeFragments::STARTUP);
     SimTime::setScaleExp(-12);
@@ -48,7 +49,7 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
     
     for (auto l : getEnvir()->getLifecycleListeners()) {
         // Idea: rather than calling the staticEnvir that initially loads up, you may be calling the previous environment
-            env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
+        env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
     }
     
     simulationPtr = new cSimulation("simulation", env);
@@ -187,6 +188,7 @@ std::tuple< std::unordered_map<std::string, ObsType>,
 
 
 void GymApi::shutdown(){
+    
     env->endSimulation();
 }
   

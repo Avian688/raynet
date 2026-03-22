@@ -1,6 +1,5 @@
 import sys, os
 from ray.runtime_env import RuntimeEnv
-from build.omnetbind import OmnetGymApi
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -22,7 +21,6 @@ import time
 from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
-import eval_utils
 from collections import deque
 
 class OmnetGymApiEnv(gym.Env):
@@ -32,8 +30,10 @@ class OmnetGymApiEnv(gym.Env):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
-        #self.spec = gym.envs.registration.EnvSpec(id="OmnetppEnv", entry_point=self.__init__,max_episode_steps=400)
+        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+        from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
+        
         self.env_config = env_config
         self.step_count = 0 # just for debugging
         self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
@@ -75,7 +75,8 @@ class OmnetGymApiEnv(gym.Env):
             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
         
         # Create empty observation history deque
-        self.obs_history = deque(np.zeros(self.stacking*7),maxlen=self.stacking*7)
+        self.num_observations = 7
+        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
         
        
     def reset(self, *, seed=None, options=None):
@@ -83,7 +84,7 @@ class OmnetGymApiEnv(gym.Env):
         #     return  return_obs_history, {}
         # self.has_reset=True
         # Reset the observation history to empty
-        self.obs_history = deque(np.zeros(self.stacking*7),maxlen=self.stacking*7)
+        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
         
 
 
@@ -106,6 +107,7 @@ class OmnetGymApiEnv(gym.Env):
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
+        ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
@@ -114,16 +116,18 @@ class OmnetGymApiEnv(gym.Env):
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
-        with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
+        with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(original_ini_file + f".worker{os.getpid()}", "Orca")
+        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
+        
         obs = obs['Orca']
+        for i in range(self.stacking):
+            self.obs_history.extend(obs)    # Reset only - fill the obs_history with copies of first obs instead of 0's
         self.obs_history.extend(obs)
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
         return  return_obs_history, {}
 
     def step(self, actions):
@@ -155,7 +159,9 @@ class OmnetGymApiEnv(gym.Env):
         if math.isnan(reward):
             print("Warning: NaN reward returned!")
         # Check if this training episode is complete
+        
         if terminateds['Orca']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+            print(terminateds)
             self.runner.shutdown()
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
@@ -192,26 +198,31 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "Orca-1.2-InferenceTesting"
+    env_name = "Orca-1.2"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 16 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
-    # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
-    # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
-    # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (1000000, 1000000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
-    bottleneck_bandwidth_range = (6, 6)            
-    minimum_rtt_range = (5, 5)
-    bottleneck_buffer_range = (5280000, 5280000) 
+    max_steps_range = (5000, 5000)
+    # bottleneck_bandwidth_range = (6, 6)            
+    # minimum_rtt_range = (5, 5)
+    # bottleneck_buffer_range = (5280000, 5280000) 
+    
+    bottleneck_bandwidth_range = (1, 10)            # Orca: 6Mbps-192Mbps
+    minimum_rtt_range = (1, 10)                      # Orca: 4ms-400ms
+    bottleneck_buffer_range = (10000, 10000000)    # Orca: 3KB-96MB, expressed in terms of bits
+    
+
+    
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Orca-1.1_2026-03-18_01-32-37c7bgae2s/checkpoints/checkpoint_13"
     steps_to_train = 1000000
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/experiment1/experiment1.ini",
+    
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range, 
                   "bottleneck_buffer_range": bottleneck_buffer_range,
                   "max_steps_range": max_steps_range,
-                  "stacking": 3}
+                  "stacking": 10}
     random.seed(seed)
     np.random.seed(seed)
     gpus = GPUtil.getGPUs()
@@ -219,14 +230,20 @@ if __name__ == '__main__':
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
             SACConfig()
-            .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
-            .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
-            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
-            .training(store_buffer_in_checkpoints=True)
+            .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
+            .env_runners(num_env_runners=num_workers, num_cpus_per_env_runner=1, num_envs_per_env_runner=1, explore=True) #, rollout_fragment_length=1000
+            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
+            .training(
+                store_buffer_in_checkpoints=True,
+                gamma=.995,
+                tau=.001,
+                actor_lr=.0001,
+                critic_lr=.001,
+                )
+            #.evaluation(evaluation_interval=3, evaluation_num_env_runners=1, evaluation_parallel_to_training=True) # (WARNING - MIGHT BREAK UPON COMPLETION, SEGFAULT WITHOUT EXPLANATION) Perform occasional runs without exploration to eval performance
             #.training(optimizer={"foreach": False, "capturable": True})
-            ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
-            ##.fault_tolerance(restart_failed_sub_environments=True)
+            #.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
+            # .fault_tolerance(restart_failed_sub_environments=False, ignore_env_runner_failures=False)
             #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             # .build_algo()
             )
@@ -245,13 +262,18 @@ if __name__ == '__main__':
     
     pprint.pprint(algo.config)
     # Main training loop!
-    step = 0
+    iteration = 0
     checkpoint = 0
-    while step < steps_to_train-1:
-        # result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
-        result = algo.training_step()
-        step += 1
-        print(f"Step {step} complete")
+    iterations_per_checkpoint = 1000
+    while True:
+        result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
+        iteration += 1
+        print(f"Iteration {iteration} complete")
+        if (iteration % iterations_per_checkpoint == 0):
+            checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
+            algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
+            print(f"Saved checkpoint to {checkpoint_dir}")
+            checkpoint += 1
 
     # old -------------------------------
     #algo = SAC.from_checkpoint(os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021")

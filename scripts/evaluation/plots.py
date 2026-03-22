@@ -174,17 +174,17 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
         
     
 if __name__ == "__main__":
-    # results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment2/results"
-    # exp = "Responsiveness"
-    # protocol = "Orca"
-    # generate_csvs(results_dir, exp, protocol, protocol_name="Orca-1.1", do_dumb_plots=True)
+    results_dir = os.getenv('HOME') + "/raynet/_experiments/double-flow-dumbbell/ini_variants/results"
+    exp = "double-flow-dumbbell"
+    protocol = "Orca"
+    generate_csvs(results_dir, exp, protocol, protocol_name="Orca-1.2", do_dumb_plots=True)
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy sorting
     metric_csvs = metric_csvs[metric_csvs["module"].str.contains("0")]          # Only grab data from primary flows
     #metric_csvs = metric_csvs[(metric_csvs["module_type"] == "client")]       # Only grab data from clients
     
 
-    experiments = ["Dumbbell"]
+    experiments = ["double-flow-dumbbell"]
     metrics = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
     module_types = ["client", "server"]
     for experiment in experiments:

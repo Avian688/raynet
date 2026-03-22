@@ -1,4 +1,4 @@
-package topologies;
+package Orca.training;
 
 @namespace(inet);
 
@@ -10,7 +10,7 @@ import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import RLComponents.Broker;
 
-network Dumbbell
+network OrcaTraining
 {
     parameters:
         int numberOfFlows = default(1);
@@ -18,7 +18,7 @@ network Dumbbell
         double bottleneckDelay @unit("ms") = default(10ms);
         
     types:
-        channel bottleneckLine extends ThruputMeteringChannel
+        channel bottleneckLine extends DatarateChannel
         {
             delay = parent.bottleneckDelay; 
             datarate = parent.bottleneckDatarate; 
