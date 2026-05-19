@@ -175,7 +175,7 @@ std::optional<ObsType> CleanSlate::computeObservation(){
     // Plotting metrics
     owner->emit(throughputSignal, this->cleanSlateThroughput);
 
-    return ObsType{
+    return ObsType({
             obs[0],     // Normalized throughput
             obs[1],       // Normalized pacerate
             obs[2], // Normalized lossrate
@@ -183,7 +183,7 @@ std::optional<ObsType> CleanSlate::computeObservation(){
             obs[4],                               // Monitor interval duration
             obs[5],             // Normalized SRTT (delay)
             obs[6]                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
-        };
+        });
 }
 
 RewardType CleanSlate::computeReward(){
