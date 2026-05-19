@@ -98,7 +98,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     if not exp_nickname:
         exp_nickname = filepath.rsplit("/", 4)[-4]
     argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
+    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate", "goodput"]
     extracted = False
     
     vec_file = filepath + f"/{protocol}-#0.vec"
@@ -141,7 +141,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                     dumb_plot(csv_path, output_name=vec)
     
     # Parse the associated scenario.xml (if applicable) and output changed values to csvs 
-    scenario_file = filepath.rsplit("/", 1)[0]  # ini_variants directory
+    scenario_file = filepath.rsplit("/", 2)[0]  # ini_variants directory
     scenario_file += f"/scenario.xml_{params_str}"
 
     print(scenario_file)
@@ -329,42 +329,89 @@ Automation script for running many experiments with different parameter combinat
 """
 if __name__ == "__main__":
     random.seed(47901741)
+    
+    # Testing params, do what u want with these
     experiments_to_run = {
-        "responsiveness": {
-            "protocols": ["Orca", "Cubic", "CleanSlate"],
-            "params": {
-                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-                },
-            "meta": {
-                "runs" : 100,
-                "bw_range" : (10, 20),
-                "rtt_range" : (10, 100),
-                }
-            },
+        # "responsiveness": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+        #         },
+        #     "meta": {
+        #         "runs" : 3,
+        #         "bw_range" : (10, 20),
+        #         "rtt_range" : (10, 100),
+        #         }
+        #     },
         
         "competing-flows": {
-            "protocols": ["Cubic", "Orca", "CleanSlate"],
+            "protocols": ["Cubic", "CleanSlate"],
             "params": {
                 "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
-                "QSIZE": [".2bdp", "1bdp", "4bdp"],
+                "DELAY"     : ["10ms","50ms", "100ms"],    
+                "QSIZE": ["1bdp"],
                 },
            "meta": {
-               "runs" : 10,
+               "runs" : 1,
                }
             },
         
-        "single-flow": {
-            "protocols": ["Cubic", "Orca", "CleanSlate"],
-            "params": {
-                "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
-                "QSIZE": [".2bdp", "1bdp", "4bdp"],
-                },
-           "meta": {
-               "runs" : 10,
-               }
-            },
+        # "single-flow": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["10Mbps"],
+        #         "DELAY"     : ["10ms","50ms", "100ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
     }
-    
     run_experiments(experiments_to_run)
+    
+    
+    
+    
+    
+    
+    
+    # # Dissertation experiment params
+    # experiments_to_run = {
+    #     "responsiveness": {
+    #         "protocols": ["Orca", "Cubic", "CleanSlate"],
+    #         "params": {
+    #             "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+    #             },
+    #         "meta": {
+    #             "runs" : 100,
+    #             "bw_range" : (10, 20),
+    #             "rtt_range" : (10, 100),
+    #             }
+    #         },
+        
+    #     "competing-flows": {
+    #         "protocols": ["Cubic", "Orca", "CleanSlate"],
+    #         "params": {
+    #             "BANDWIDTH" : ["10Mbps"],
+    #             "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
+    #             "QSIZE": [".2bdp", "1bdp", "4bdp"],
+    #             },
+    #        "meta": {
+    #            "runs" : 10,
+    #            }
+    #         },
+        
+    #     "single-flow": {
+    #         "protocols": ["Cubic", "Orca", "CleanSlate"],
+    #         "params": {
+    #             "BANDWIDTH" : ["10Mbps"],
+    #             "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
+    #             "QSIZE": [".2bdp", "1bdp", "4bdp"],
+    #             },
+    #        "meta": {
+    #            "runs" : 10,
+    #            }
+    #         },
+    # }
+    # run_experiments(experiments_to_run)

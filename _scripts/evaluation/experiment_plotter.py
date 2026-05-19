@@ -20,6 +20,7 @@ import re
 import matplotlib.ticker as ticker
 from matplotlib.ticker import MaxNLocator
 from matplotlib.lines import Line2D
+import matplotlib.patheffects as pe
 
 protocol_colors = {
     "Cubic": "#ff7f0e",
@@ -34,6 +35,48 @@ protocol_markers = {
     "Orca": "P",
     "Astrea": "^",
 }
+
+def percentile_clip(series, lower=1, upper=99):
+    """
+    Clips extreme values outside the given percentiles.
+    
+    lower, upper: percentile thresholds (0-100)
+    """
+    low = np.percentile(series, lower)
+    high = np.percentile(series, upper)
+
+    return series.clip(lower=low, upper=high)
+
+def hampel_filter(series, window_size=7, n_sigmas=3):
+    """
+    Hampel filter for outlier removal.
+    Replaces outliers with the rolling median.
+    """
+    s = series.copy()
+
+    rolling_median = s.rolling(window=window_size, center=True).median()
+    mad = (s - rolling_median).abs().rolling(window=window_size, center=True).median()
+
+    threshold = n_sigmas * 1.4826 * mad
+    diff = (s - rolling_median).abs()
+
+    outliers = diff > threshold
+    s[outliers] = rolling_median[outliers]
+
+    return s
+
+def remove_single_point_spikes(series, threshold):
+    s = series.copy()
+
+    for i in range(1, len(s)-1):
+        if (
+            abs(s[i] - s[i-1]) > threshold and
+            abs(s[i] - s[i+1]) > threshold and
+            abs(s[i-1] - s[i+1]) < threshold
+        ):
+            s[i] = (s[i-1] + s[i+1]) / 2
+
+    return pd.Series(s, index=series.index)
 
 def parse_numeric(value, as_int=False):
     match = re.search(r"[-+]?\d*\.?\d+", str(value))
@@ -266,10 +309,28 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
             rolling_std = y.rolling(window, center=True).std()
 
             # Raw data
-            line, = ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
+            line, = ax.plot(
+                x, 
+                y, 
+                alpha=0.2, 
+                linewidth=0.8, 
+                color=protocol_colors[row["protocol"]],
+                )
 
             # Smoothed mean
-            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"] if is_primary_flow else None, color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
+            ax.plot(
+                x, 
+                rolling_mean, 
+                label=row["protocol"] if is_primary_flow else None, 
+                color=protocol_colors[row["protocol"]], 
+                linestyle='-' if is_primary_flow else (0, (1, .5)),
+                lw= 1 if is_primary_flow else 1,
+                alpha= 1.0 if is_primary_flow else 0.7,
+                path_effects=[
+                    pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
+                    pe.Normal()
+                ]
+                )
 
     ax.set_ylabel("cwnd (bytes)")
     ax.set_ylim(bottom=0)
@@ -311,7 +372,13 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
                 data["srtt"],
                 label=row["protocol"], 
                 color=protocol_colors[row["protocol"]],
-                linestyle='-' if is_primary_flow else '--'
+                linestyle='-' if is_primary_flow else (0, (1, .5)),
+                lw= 1 if is_primary_flow else 1,
+                alpha= 1.0 if is_primary_flow else 0.7,
+                path_effects=[
+                    pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
+                    pe.Normal()
+                ]
             )
             all_y_values.extend(data["srtt"].values)
 
@@ -378,14 +445,20 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
         data = data[data["time"] > startup_time]
         if end_time:
             data = data[data["time"] < end_time]
-        is_primary_flow = "0" in row["module"]
+        is_primary_flow = "server[0]" in row["module"]
         if(show_competition or is_primary_flow):
             line = ax.plot(
                 data["time"],
                 data["throughput"],
                 label=row["protocol"] if is_primary_flow else None,
                 color=protocol_colors[row["protocol"]],
-                linestyle='-' if is_primary_flow else '--'
+                linestyle='-' if is_primary_flow else (0, (1, .5)),
+                lw= 1 if is_primary_flow else 1,
+                alpha= 1.0 if is_primary_flow else 0.7,
+                path_effects=[
+                    pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
+                    pe.Normal()
+                ]
             )
             all_y_values.extend(data["throughput"].values)
             
@@ -418,7 +491,96 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
             )
 
     ax.set_ylabel("Throughput (Mbps)")
-    ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
+    if not scenario_throughput_df.empty:
+        ax.set_ylim(bottom=0, top=np.percentile(scenario_throughput_data["datarate"].values, 99)*1.1)
+    else:
+        ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
+    ax.set_xlim(left=0)
+    ax.set_yscale("linear")
+    ax.yaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda y, _: f"{y/1e6:g}") # makes the y-axis Mbps insead of Bps
+    )
+    if end_time:
+        ax.set_xlim(right=end_time)
+    return ax
+
+def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, filter_spikes=True):
+    """
+    Overlays results from several experiments to create a single goodput plot for comparison.
+    - Expects a single experiment's dataframe as input
+    - Only plots primary flows (module number is 0, module type is server)
+    """
+    scenario_df = csv_df[csv_df["module_type"].str.contains("scenario")]
+    csv_df = csv_df[csv_df["module_type"].str.contains("server")]
+    csv_df = csv_df[csv_df["module"].str.contains("app")]
+    csv_df = csv_df[csv_df["metric"].str.contains("goodput")]
+
+    if csv_df.empty:
+        print("plot_goodput_timeseries(): CSV dataframe is empty. Returning.")
+        return None
+
+    print("Plotting goodput timeseries for:")
+    print(csv_df)
+    
+    colors = {}
+    all_y_values = []
+    for _, row in csv_df.iterrows():
+        data = pd.read_csv(row["csv_path"])
+        data = data[data["time"] > startup_time]
+        if end_time:
+            data = data[data["time"] < end_time]
+        if filter_spikes:
+            data["goodput"] = hampel_filter(data["goodput"], window_size=10, n_sigmas=3) # remove spikes for clarity
+        
+        is_primary_flow = "server[0]" in row["module"]
+        if(show_competition or is_primary_flow):
+            line = ax.plot(
+                data["time"],
+                data["goodput"],
+                label=row["protocol"] if is_primary_flow else None,
+                color=protocol_colors[row["protocol"]],
+                linestyle='-' if is_primary_flow else (0, (1, .5)),
+                lw= 1 if is_primary_flow else 1,
+                alpha= 1.0 if is_primary_flow else 0.7,
+                path_effects=[
+                    pe.Stroke(linewidth=2, foreground='white', alpha=0.65),
+                    pe.Normal()
+                ]
+            )
+            all_y_values.extend(data["goodput"].values)
+
+    # Plot optimal goodput only if there is a scenario file containing that info (mostly for responsiveness experiments)
+    scenario_goodput_df = scenario_df[scenario_df["metric"] == "datarate"]
+
+    if not scenario_goodput_df.empty:
+        scenario_goodput_df = scenario_goodput_df.iloc[0]
+        scenario_goodput_data = pd.read_csv(scenario_goodput_df["csv_path"])
+
+        if end_time:
+            scenario_goodput_data = scenario_goodput_data[scenario_goodput_data["time"] < end_time]
+            # Add the last scenario entry at end_time so the optimal line reaches the end of the plot
+            last_bw = scenario_goodput_data.loc[scenario_goodput_data["time"].idxmax(), "datarate"]
+            extra_bw_entry = pd.DataFrame([{"time": end_time, "datarate": last_bw}])
+            scenario_goodput_data = pd.concat([scenario_goodput_data, extra_bw_entry], ignore_index=True)
+
+        scenario_goodput_data["datarate"] *= 125000 * 8  # mbps
+        ax.plot(
+                scenario_goodput_data["time"],
+                scenario_goodput_data["datarate"],
+                linestyle='--',
+                linewidth=1,
+                color='black',
+                alpha=1,
+                label="Optimal",
+                drawstyle="steps-post",
+                zorder=10
+            )
+
+    ax.set_ylabel("Goodput (Mbps)")
+    if not scenario_goodput_df.empty:
+        ax.set_ylim(bottom=0, top=np.percentile(scenario_goodput_data["datarate"].values, 99)*1.1)
+    else:
+        ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
     ax.set_xlim(left=0)
     ax.set_yscale("linear")
     ax.yaxis.set_major_formatter(
@@ -430,16 +592,17 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
 
 def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competing=False, size=.5):
     if all:
-        count = 5
+        count = 6
     else:
-        count = 3
+        count = 4
     fig, axs = plt.subplots(count, 1, figsize=(15 * size, count * 5 * size))
-    plot_throughput_timeseries(run_df, axs[0], startup_time=startup_time,  end_time=end_time)
-    plot_srtt_timeseries(run_df, axs[1], startup_time=startup_time, end_time=end_time)
-    plot_cwnd_timeseries(run_df, axs[2], startup_time=startup_time,  end_time=end_time)
+    plot_goodput_timeseries(run_df, axs[0], startup_time=startup_time,  end_time=end_time)
+    plot_throughput_timeseries(run_df, axs[1], startup_time=startup_time,  end_time=end_time)
+    plot_srtt_timeseries(run_df, axs[2], startup_time=startup_time, end_time=end_time)
+    plot_cwnd_timeseries(run_df, axs[3], startup_time=startup_time,  end_time=end_time)
     if all: 
-        plot_pacerate_timeseries(run_df, axs[3], startup_time=startup_time,  end_time=end_time)
-        plot_qsize_timeseries(run_df, axs[4], startup_time=startup_time,  end_time=end_time)
+        plot_pacerate_timeseries(run_df, axs[4], startup_time=startup_time,  end_time=end_time)
+        plot_qsize_timeseries(run_df, axs[5], startup_time=startup_time,  end_time=end_time)
     fig.subplots_adjust(top=0.95, bottom=.07, left=.1, right=.97)
     axs[count-1].set_xlabel("Time (seconds)")
     # for ax_i in axs[0]:
@@ -477,7 +640,7 @@ def plot_tcp_friendliness(csv_df, ax=None, show_competition=False, startup_time=
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
 
     if csv_df.empty:
-        print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
+        print("plot_throughput_ratio_aggregate(): CSV dataframe is empty. Returning.")
         return None
 
     qsizes = sorted(csv_df["QSIZE"].unique())
@@ -572,14 +735,14 @@ def plot_tcp_friendliness(csv_df, ax=None, show_competition=False, startup_time=
         ax_i.set_title(f"Buffer Size: {parse_numeric(qsize)}x BDP")
 
         if ax_i is axes_to_use[0]:
-            ax_i.set_ylabel("Goodput Ratio")
+            ax_i.set_ylabel("Throughput Ratio")
         ax_i.set_yscale("log")
         ax_i.set_ylim(0.01, 100)
         ax_i.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
         ax_i.set_yticks([.01, .1, 1, 10, 100])
             
     if ax is None:
-        # fig.suptitle("TCP Friendliness; Goodput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
+        # fig.suptitle("TCP Friendliness; Throughput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
         legend_handles, legend_labels = axes_to_use[0].get_legend_handles_labels()
         fig.legend(
             legend_handles,
@@ -608,7 +771,7 @@ def plot_delay_aggregate(csv_df, ax=None, show_competition=False, startup_time=3
     csv_df = csv_df[csv_df["metric"].str.contains("srtt")]
 
     if csv_df.empty:
-        print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
+        print("plot_throughput_ratio_aggregate(): CSV dataframe is empty. Returning.")
         return None
 
     qsizes = sorted(csv_df["QSIZE"].unique())
@@ -702,7 +865,7 @@ def plot_delay_aggregate(csv_df, ax=None, show_competition=False, startup_time=3
     
     
     if ax is None:
-        # fig.suptitle("TCP Friendliness; Goodput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
+        # fig.suptitle("TCP Friendliness; Throughput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
         legend_handles, legend_labels = axes_to_use[0].get_legend_handles_labels()
         fig.legend(
             legend_handles,
@@ -729,7 +892,7 @@ def plot_throughput_aggregate(csv_df, ax=None, show_competition=False, startup_t
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
 
     if csv_df.empty:
-        print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
+        print("plot_throughput_ratio_aggregate(): CSV dataframe is empty. Returning.")
         return None
 
     qsizes = sorted(csv_df["QSIZE"].unique())
@@ -813,7 +976,7 @@ def plot_throughput_aggregate(csv_df, ax=None, show_competition=False, startup_t
         ax_i.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
         ax_i.set_ylim(bottom=0)
     if ax is None:
-        # fig.suptitle("TCP Friendliness; Goodput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
+        # fig.suptitle("TCP Friendliness; Throughput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
         legend_handles, legend_labels = axes_to_use[0].get_legend_handles_labels()
         fig.legend(
             legend_handles,
@@ -1080,7 +1243,7 @@ Automatically generates plots for all experiments. This is mostly built-to-purpo
 but can serve as a template for other experiment/plot automation by future maintainers as well.
 - Timeseries plots are for a particular run
 - CDF plots are intended for the responsiveness experiment, showing aggregate performance over many random trials
-- TCP friendliness plots are intended for the competing flows experiment, showing goodput ratio against the competing cubic flow
+- TCP friendliness plots are intended for the competing flows experiment, showing throughput ratio against the competing cubic flow
 """
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
