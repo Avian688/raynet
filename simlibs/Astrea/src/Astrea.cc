@@ -199,7 +199,7 @@ std::optional<ObsType> Astrea::computeObservation(){
         // Finally, schedule the next step (will be automatically cancelled if done)
         scheduleNextStep(this->fixedIntervalDuration);
     }
-    return ObsType{
+    return ObsType({
             obs[0],     // Normalized throughput (thr/thr_max)
             obs[1],     // max throughput (raw)
             obs[2],     // latency ratio (lat/lat_min)
@@ -208,7 +208,7 @@ std::optional<ObsType> Astrea::computeObservation(){
             obs[5],                     // loss (lossrate/thr_max)
             obs[6],                                           // in-flight bytes (pkt_flight/cwnd)
             obs[7],                          // pacing rate (prate/thr_max, will require tcpPaced and currently doesn't work)
-        };
+        });
 }
 
 RewardType Astrea::computeReward(){

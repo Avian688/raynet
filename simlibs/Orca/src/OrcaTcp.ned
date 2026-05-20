@@ -10,8 +10,8 @@ simple OrcaTcp extends TcpPaced
         int stateSize; 					                    // dimension of the state space
         int maxObsCount; 				                    // max number of observations for a single state
         double ewmaWeight; 				                    // weight for the moving average of state variables (as in Tcp-Ex Machina)
-        double rewardDelayForgiveness; 		                    // Reward only suffers if (delay > minDelay * rewardDelayForgiveness). (higher values = more forgiveness, less impact of delay increases on reward)
-        double rewardLossMultiplier;                        // How strongly loss impacts reward (higher = stronger impact)
+        double delayCoefficient = default(1.25); 		    // Reward only suffers if (delay > minDelay * rewardDelayForgiveness). (higher values = more forgiveness, less impact of delay increases on reward)
+        double lossCoefficient = default(5);                // How strongly loss impacts reward (higher = stronger impact)
 
         bool printDebugMessages;                            // used to print debug messages
         bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.

@@ -27,14 +27,13 @@ Orca::~Orca() {
     if (debug) cout << "\tOrca: Destructor method called. Goodbye.";
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
-    
 }
 
 // Called during sim initialization
 void Orca::initialize() {
     if (debug) cout << "\tOrca initialize()" << endl;
-    this->rewardDelayForgiveness = this->conn->getTcpMain()->par("rewardDelayForgiveness");
-    this->rewardLossMultiplier = this->conn->getTcpMain()->par("rewardLossMultiplier");
+    this->delayCoefficient = this->conn->getTcpMain()->par("delayCoefficient");
+    this->lossCoefficient = this->conn->getTcpMain()->par("lossCoefficient");
     this->fixedIntervals = this->conn->getTcpMain()->par("fixedIntervals");
     this->fixedIntervalDuration = this->conn->getTcpMain()->par("fixedIntervalDuration");
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
@@ -48,20 +47,19 @@ void Orca::initialize() {
     RLInterface::initialise();
     TcpCubic::initialize();
 
-    // Register metric signals (for plotting)
+    // Signals
     throughputSignal = owner->registerSignal("throughput");
     actionSignal = owner->registerSignal("action");
-    // Suscribe to important signals:
-    TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
+    TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection *>(conn);
     pacedConn->subscribe(pacedConn->retransmissionRateSignal, (cListener*) this);
 }
 
-// OMNet Method? Called after component initialization is complete?
+// INET method, called after connection is established.
 void Orca::established(bool active) {
     if (debug) cout << "\tOrca: established()" << endl;
     TcpCubic::established(active);
     
-    // Only initialize the RL agent if this is a client
+    // Only register this as an RL agent if this is a client
     if (active) {
         this->isActive = active;
 
@@ -119,17 +117,13 @@ std::optional<ObsType> Orca::computeObservation(){
     // Delay: Tracked in overridden method above. Only update the minimum if delay reports were received this interval.
     if (this->rttReportCount == 0 || state->srtt.dbl() == 0.0) {
         // No RTT reports were received this interval. Set all RTT related values to 0 to represent lack of data.
-        this->orcaDelay = 0.0; // Deprecated?
-        this->orcaDelayMetric = 0.0; // Delay is unobserved, not 0. Do not report as optimal.
-        obs[5] = 0.0; // SRTT
-        obs[6] = 0.0; // Delay metric
+        this->orcaDelayMetric = 0.0;    // Delay is unobserved, not 0. Do not report as optimal.
+        obs[5] = 0.0;                   // SRTT
+        obs[6] = 0.0;                   // Delay metric
     } else {
-        // RTT reports were received this interval. Compute the average and potentially update the minimum.
-        this->orcaDelay = this->orcaDelaySum/this->rttReportCount;
-
-        // Compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the forgiveness window.)
-        if (state->srtt > this->orcaMinDelay * this->rewardDelayForgiveness) {                                             
-            this->orcaDelayMetric = this->orcaMinDelay * this->rewardDelayForgiveness / state->srtt;
+        // Observation is valid, compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the delay budget)
+        if (state->srtt > this->orcaMinDelay * this->delayCoefficient) {                                             
+            this->orcaDelayMetric = this->orcaMinDelay * this->delayCoefficient / state->srtt;
         } else {
             this->orcaDelayMetric = 1.0;
         }
@@ -138,12 +132,11 @@ std::optional<ObsType> Orca::computeObservation(){
     }
     
 
-    // Update step count, and check if the step limit has been reached
+    // Schedule next step if episode not done
     RLStepsTaken++;
     if (RLStepsTaken >= this->maxRLSteps) {
         done = true;
     } else {
-        // Finally, schedule the next step (will be automatically cancelled if done)
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());
     }
     
@@ -177,13 +170,13 @@ std::optional<ObsType> Orca::computeObservation(){
     owner->emit(throughputSignal, this->orcaThroughput);
 
     return ObsType({
-            obs[0],     // Normalized throughput
-            obs[1],       // Normalized pacerate
-            obs[2], // Normalized lossrate
+            obs[0],                   // Normalized throughput
+            obs[1],               // Normalized pacerate
+            obs[2],               // Normalized lossrate
             obs[3],              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
-            obs[4],                               // Monitor interval duration
+            obs[4],              // Monitor interval duration
             obs[5],             // Normalized SRTT (delay)
-            obs[6]                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
+            obs[6]              // Normalized SRTT (possibly forgiven, if within the forgiveness window)
     });
 }
 
@@ -193,7 +186,7 @@ RewardType Orca::computeReward(){
     if (this->orcaMaxThroughput == 0.0) {
         reward = 0.0;
     } else {
-        reward = (this->orcaThroughput-(this->rewardLossMultiplier*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric;
+        reward = (this->orcaThroughput-(this->lossCoefficient*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric;
     }
     if (debug) cout << "\t\tReward: " << reward << endl;
     return(reward);
@@ -213,7 +206,7 @@ void Orca::decisionMade(ActionType action) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
-        // Update pacing rate (standard approach)
+        // Update pacing rate
         if(state->snd_cwnd > 0) {
             double paceFactor;
             if (state->snd_cwnd < state->ssthresh/2) {
@@ -236,7 +229,6 @@ void Orca::decisionMade(ActionType action) {
 
     if (debug) {
         cout << "\t\t" << (this->takeActions) << endl;
-        // cout << "\t\t" << (this->first_slowstart_complete) << endl;
         cout << "\t\t" << (this->rttReportCount > 0) << endl;
         cout << "\t\t" << (newCwnd < 1000000) << endl;
         cout << "-" << endl;
@@ -249,8 +241,7 @@ void Orca::resetStepVariables()
     if (debug) cout << "\t\tOrca: resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
-    this->orcaDelay=0.0;         // The average delay of packets over the last interval
-    this->orcaDelaySum=0.0;      // Sum of all RTT reports received over an interval
+    this->orcaDelaySum=0.0;      // Sum of all RTT reports received over an interval 
     this->orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     this->bytesDelivered=0.0;
     this->rttReportCount=0; // The number of RTT values we have measured over the last interval
