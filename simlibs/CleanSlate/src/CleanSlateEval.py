@@ -148,7 +148,7 @@ if __name__ == '__main__':
     register_env(env_name, omnetgymapienv_creator)
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/CleanSlate/checkpoints/checkpoint_13"
+    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/CleanSlate"
     env_config = {"iniPath": sys.argv[1],
                   "stacking": 10}
     

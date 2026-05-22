@@ -163,6 +163,7 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
                 getSimulation()->executeEvent(event);                
                 if (eventName.find(std::string("EOS")) != std::string::npos) {
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
+                    FINALLY();
                     return agentId;
                 }
        
@@ -194,6 +195,7 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
                 getSimulation()->executeEvent(event);
                 if (eventName.find(std::string("EOS")) != std::string::npos) {
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
+                    FINALLY();
                     return agentId;
                     }
                 checkTimeLimits();  // XXX potential performance hog (maybe check every 256 events, unless "cmdenv-strict-limits" is on?)
@@ -263,6 +265,7 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                 getSimulation()->executeEvent(event);
                 if (eventName.find(std::string("EOS")) != std::string::npos) {
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
+                    FINALLY();
                     return agentId;
                 }
        
@@ -296,6 +299,7 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                 getSimulation()->executeEvent(event);
                 if (eventName.find(std::string("EOS")) != std::string::npos) {
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
+                    FINALLY();
                     return agentId;
                 }
                 

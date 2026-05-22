@@ -1,3 +1,0 @@
-package tcppaced;
-
-@license(LGPL);

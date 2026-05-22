@@ -84,9 +84,7 @@ export RAYNET_FEATURE=$feature
 source $HOME/omnetpp/setenv
 
 # List of simlibs. Any simlib that needs to be compiled FIRST (eg. is a dependency) should be added here, rather than the loop.
-simlibs=("$RAYNET_HOME/simlibs/RLComponents"
-         "$RAYNET_HOME/simlibs/tcpPaced"
-         "$RAYNET_HOME/simlibs/cubic")
+simlibs=("$RAYNET_HOME/simlibs/RLComponents")
 
 # list directories in the form "/tmp/dirname/"
 for dir in $RAYNET_HOME/simlibs/*/     

@@ -134,7 +134,7 @@ std::optional<ObsType> Orca::computeObservation(){
 
     // Schedule next step if episode not done
     RLStepsTaken++;
-    if (RLStepsTaken >= this->maxRLSteps) {
+    if (RLStepsTaken >= this->maxRLSteps && this->maxRLSteps > 0) {
         done = true;
     } else {
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());

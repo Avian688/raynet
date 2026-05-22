@@ -116,6 +116,7 @@ class OmnetGymApiEnv(gym.Env):
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
+        print(f"SAVING TO {ini_variants_base + f".worker{os.getpid()}"}")
         with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
         
@@ -177,12 +178,17 @@ if __name__ == '__main__':
     seed = 91456211
     max_steps_range = (2000, 2000)
     
-    # Original run training params
-    bottleneck_bandwidth_range = (5, 20)            # Megabits
-    minimum_rtt_range = (5, 100)                      # ms
-    bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
+    # Dissertation training parameters
+    # bottleneck_bandwidth_range = (5, 20)            # Megabits
+    # minimum_rtt_range = (5, 100)                      # ms
+    # bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
-    load_from_checkpoint = True
+    # # Orca paper parameters
+    bottleneck_bandwidth_range = (6, 192)            # Megabits
+    minimum_rtt_range = (4, 400)                      # ms
+    bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
+    
+    load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"
     steps_to_train = 1000000
     

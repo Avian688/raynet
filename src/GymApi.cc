@@ -12,9 +12,9 @@ void GymApi::cleanupmemory(){
     delete simulationPtr;  // will delete app as well
     
     // Below are manual cleanup steps to prevent memory leaks and dangling pointers.
-    // Some of these are likely best practices and should be kept, but cause crashes during cleaup in new OMNeT++ versions.
+    // Some of these are likely best practices and should be kept, but cause crashes during cleanup in new OMNeT++ versions.
     // Most of these should be added back in once the reset lifecycle listener/segfault bug is fixed, but for now they are commented out to prevent crashes during cleanup.
-    // CodeFragments::executeAll(CodeFragments::SHUTDOWN);
+    CodeFragments::executeAll(CodeFragments::SHUTDOWN);
     
     // cout << "GymApi.cc::cleanupmemory(): Manually removing all dead lifecyclelisteners from static env:" << endl;
     // int size = getEnvir()->listeners.size();

@@ -110,6 +110,10 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 opp_scavetool i "{vec_file}" &&
                 opp_scavetool export "{vec_file}" -F CSV-R -o "{out_path}"
             """
+    # cmd = f"""
+    #             source ~/omnetpp/setenv &&
+    #             opp_scavetool export "{vec_file}" -F CSV-R -o "{out_path}"
+    #         """
     subprocess.Popen(cmd, shell=True, executable="/bin/bash").communicate(timeout=40)
     
     # Create an individual output CSV for each metric in vectorsToExtract
@@ -338,7 +342,7 @@ if __name__ == "__main__":
                 "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
                 },
             "meta": {
-                "runs" : 3,
+                "runs" : 1,
                 "bw_range" : (10, 20),
                 "rtt_range" : (10, 100),
                 }

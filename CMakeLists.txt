@@ -26,8 +26,21 @@ foreach(lib ${SIMLIB_DIRS})
     endif()
 endforeach()
 
-# Non-simlib libraries (no looping here, these are required to make the project work)
+# External libraries (no looping here, these are required to make the project work)
 set(INET_MODEL_PATH $ENV{HOME}/inet4.5/src)
+
+set(TCPGOODPUT_PATH $ENV{HOME}/omnetpp/samples/tcpGoodputApplications/src) # tcpGoodputApplications, creates goodput vectors for plotting via custom TcpApp
+list(APPEND LIB_PATHS ${TCPGOODPUT_PATH})
+list(APPEND LIB_NAMES tcpGoodputApplications)
+
+set(LEOSATELLITES_PATH $ENV{HOME}/omnetpp/samples/leosatellites/src) # leosatellites, not strictly necessary but contains features that ORBTCPEXPERIMENTS needs
+list(APPEND LIB_PATHS ${LEOSATELLITES_PATH})
+list(APPEND LIB_NAMES leosatellites)
+
+set(ORBTCPEXPERIMENTS_PATH $ENV{HOME}/omnetpp/samples/orbtcpExperiments/src) # orbtcpExperiments, Aiden's experiment suite with some custom components like BandwidthRecorderDropTailQueue
+list(APPEND LIB_PATHS ${ORBTCPEXPERIMENTS_PATH})
+list(APPEND LIB_NAMES orbtcpExperiments)
+
 
 # Declare Release libraries
 set(MY_LIB_LINK_LIBRARIES_RELEASE optimized oppsim optimized oppcommon optimized oppcmdenv optimized Cmdrlenv optimized oppnedxml optimized oppenvir optimized -Wl,--no-as-needed INET) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib

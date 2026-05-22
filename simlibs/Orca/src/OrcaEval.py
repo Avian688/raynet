@@ -81,7 +81,7 @@ class OmnetGymApiEnv(gym.Env):
         self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
         
         
-        self.runner.initialise(self.env_config["iniPath"], "Orca")
+        self.runner.initialise(self.env_config["iniPath"], self.env_config["config_section"])
         
         
         obs = self.runner.reset()
@@ -148,8 +148,9 @@ if __name__ == '__main__':
     register_env(env_name, omnetgymapienv_creator)
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"
+    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca"
     env_config = {"iniPath": sys.argv[1],
+                  "config_section": sys.argv[2] if len(sys.argv) > 2 else "Orca", # Optional argument to specifcy which config.ini section to run. Orca by default.
                   "stacking": 10}
     
     ray.init(local_mode=True)
