@@ -151,6 +151,7 @@ if __name__ == '__main__':
     env_name = "Cubic-inference"
     register_env(env_name, omnetgymapienv_creator)
     env_config = {"iniPath": sys.argv[1],
+                  "config_section": sys.argv[2] if len(sys.argv) > 2 else "Orca", # Optional argument to specifcy which config.ini section to run. Orca by default.
                   "stacking": 10}
     ray.init(local_mode=True)
     config = (

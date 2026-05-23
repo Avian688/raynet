@@ -179,14 +179,14 @@ if __name__ == '__main__':
     max_steps_range = (2000, 2000)
     
     # Dissertation training parameters
-    # bottleneck_bandwidth_range = (5, 20)            # Megabits
-    # minimum_rtt_range = (5, 100)                      # ms
-    # bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
+    bottleneck_bandwidth_range = (5, 20)            # Megabits
+    minimum_rtt_range = (5, 100)                      # ms
+    bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
-    # # Orca paper parameters
-    bottleneck_bandwidth_range = (6, 192)            # Megabits
-    minimum_rtt_range = (4, 400)                      # ms
-    bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
+    # # # Orca paper parameters
+    # bottleneck_bandwidth_range = (6, 192)            # Megabits
+    # minimum_rtt_range = (4, 400)                      # ms
+    # bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"

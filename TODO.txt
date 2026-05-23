@@ -9,7 +9,7 @@
 - [ ] Add multi-agent support to Orca (assign unique RLID's like Astraea, and don't extract raw obs/reward/action values in Orca's training/eval scripts)
 - [ ] Figure out a multi-RL-protocol workflow for competition experiments
 - [ ] Make exp runner and exp plotter scripts more modular and less spaghetti
-- [ ] Force vecs to always output (even for short simulations or at the tail end of simulations)
+- [x] Force vecs to always output (even for short simulations or at the tail end of simulations)
 - [ ] Remove all Cmdrlenv outputs when in silent mode
 - [ ] Add experiment fault-tolerance to allow experiments to continue running if one fails
 - [ ] Track experiment runner progress so it can easily be paused and resumed

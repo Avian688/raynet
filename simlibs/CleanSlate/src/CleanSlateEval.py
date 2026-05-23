@@ -155,6 +155,7 @@ if __name__ == '__main__':
     load_from_checkpoint = True
     checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/CleanSlate"
     env_config = {"iniPath": sys.argv[1],
+                  "config_section": sys.argv[2] if len(sys.argv) > 2 else "CleanSlate", # Optional argument to specifcy which config.ini section to run. CleanSlate by default.
                   "stacking": 10}
     
     ray.init(local_mode=True)
