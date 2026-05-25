@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <numeric>
 #include <ostream>
-#ifdef ORCA
 #include "Orca.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
@@ -294,6 +293,3 @@ void Orca::receivedDataAck(uint32_t firstSeqAcked) {
     TcpCubic::receivedDataAck(firstSeqAcked);
     this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
 }
-
-
-#endif

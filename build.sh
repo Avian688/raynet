@@ -5,24 +5,18 @@ export RAYNET_HOME=$HOME/raynet
 # Usage info
 show_help(){
 
-echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
-	Build (compile and link) Raynet with feature FEATURE in BUILDMODE mode. 
+echo {"Usage: ${0##*/} [-h] [-m BUILDMODE]...
+	Build (compile and link) Raynet BUILDMODE mode. 
 
        -h            display this help and exit
 	   -b			 make with 'bear -- make' to generate compile commands (requires bear)
 	   -c			 clean simulation libarries before building
        -r            rebuild (deletes the current build directory before proceeding)
-       -m BUILDMODE  chose between release and debug modes. Defaults to release.
-       -f FEATURE    chose the feature to build. Currently available:
-                          RLRDP (default) Builds Raynet to support RDP Agents
-                          CARTPOLE        Builds raynet for cartpole experimentation
-                          ORCA            Builds raynet for ORCA experimentation
-                          JAMESCC         Build raynet for JamesCC basic congestion control examples"
+       -m BUILDMODE  chose between release and debug modes. Defaults to release."
 }
    
    # Initialize our own variables:
    mode="release"
-   feature="CARTPOLE"
    make_prefix=""
    clean="false"
    rebuild="false"
@@ -31,7 +25,7 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
    # Resetting OPTIND is necessary if getopts was used previously in the script.
    # It is a good idea to make OPTIND local if you process options in a function.
    
-   while getopts hbcrm:f: opt; do
+   while getopts hbcrm: opt; do
        case $opt in
            h)
                show_help
@@ -47,8 +41,6 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
                rebuild='true'
                ;;
            m)  mode=$OPTARG
-               ;;
-           f)  feature=$OPTARG
                ;;
 			   
            *)
@@ -66,17 +58,6 @@ then
 	echo "Build failed."	
 	exit 1 
 	fi
-
-# Check for invalid feature #todo: remove this? New users should not need to modify the build script to get their feature built
-if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ] && [ "$feature" != "JAMESCC" ] && [ "$feature" != "CLEANSLATE" ] && [ "$feature" != "ASTREA" ]
-then
-	echo "-f option value not recognised."
-	echo "Build failed."	
-	exit 1  
-	fi
-export RAYNET_FEATURE=$feature
-
-
 
 # Command/flags have been validated. Begin building here.
 # ----------------------------------------------------------------------------------------------------------------------------------

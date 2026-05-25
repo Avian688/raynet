@@ -1,4 +1,3 @@
-#ifdef CLEANSLATE
 #include "CleanSlateTcp.h"
 
 Define_Module (CleanSlateTcp);
@@ -22,5 +21,3 @@ void TcpPacedConnection::computeRetransmissionRate()
     lastTotalRetransmittedBytes = totalRtxBytes;
     lastRetransmissionRateTime = simTime();
 }
-
-#endif

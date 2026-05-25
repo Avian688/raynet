@@ -1,5 +1,4 @@
 // Written by Luca - Just a version of TCP that allows access to custom flavours (like my JamesCC)
-#ifdef ASTREA
 #ifndef TRANSPORTLAYER_AstreaTcp_H_
 #define TRANSPORTLAYER_AstreaTcp_H_
 
@@ -19,4 +18,3 @@ public:
 };
 
 #endif /* TRANSPORTLAYER_AstreaTcp_H_ */
-#endif

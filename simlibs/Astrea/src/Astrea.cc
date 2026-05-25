@@ -3,7 +3,6 @@
 #include "omnetpp/simtime.h"
 #include "omnetpp/simtime_t.h"
 #include <optional>
-#ifdef ASTREA
 #include "Astrea.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
@@ -290,6 +289,3 @@ RewardType Astrea::getReward(){
     if (debug) cout << "\tAstrea: getReward()" << endl;
     // Deprecated, remove this later
 }
-
-
-#endif

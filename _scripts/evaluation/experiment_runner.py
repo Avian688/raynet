@@ -306,7 +306,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
         # Perform all generated experiment files for each protocol
         for protocol_name in experiments_dict[experiment_name]["protocols"]:
             build_str = "ORCA" if protocol_name == "Cubic" else protocol_name.upper()
-            subprocess.Popen(f"source ~/omnetpp/setenv && cd ~/raynet && ./build.sh -f {build_str}", shell=True, executable="/bin/bash").communicate(timeout=40)
+            #subprocess.Popen(f"source ~/omnetpp/setenv && cd ~/raynet && ./build.sh", shell=True, executable="/bin/bash").communicate(timeout=40)
             for params in unique_param_combinations: # Looping through a second time separately so I don't have to generate all the files multiple times
                 for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
                     # Run the experiment for this protocol and param combo
@@ -336,29 +336,29 @@ if __name__ == "__main__":
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        "responsiveness": {
-            "protocols": ["CleanSlate"],
-            "params": {
-                "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
-                },
-            "meta": {
-                "runs" : 3,
-                "bw_range" : (10, 20),
-                "rtt_range" : (10, 100),
-                }
-            },
-        
-        # "competing-flows": {
+        # "responsiveness": {
         #     "protocols": ["CleanSlate"],
         #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["10ms","50ms", "100ms"],    
-        #         "QSIZE": ["1bdp"],
+        #         "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
         #         },
-        #    "meta": {
-        #        "runs" : 1,
-        #        }
+        #     "meta": {
+        #         "runs" : 3,
+        #         "bw_range" : (10, 20),
+        #         "rtt_range" : (10, 100),
+        #         }
         #     },
+        
+        "competing-flows": {
+            "protocols": ["CleanSlate", "Orca", "Cubic"],
+            "params": {
+                "BANDWIDTH" : ["10Mbps"],
+                "DELAY"     : ["10ms","50ms"],    
+                "QSIZE": ["1bdp"],
+                },
+           "meta": {
+               "runs" : 1,
+               }
+            },
         
         # "single-flow": {
         #     "protocols": ["Orca"],

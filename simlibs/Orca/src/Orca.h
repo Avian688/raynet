@@ -1,5 +1,4 @@
 #include "omnetpp/clistener.h"
-#ifdef ORCA
 #ifndef __ORCA_CC_H_
 #define __ORCA_CC_H_
 
@@ -92,5 +91,4 @@ public: // General use
     
     double bytesDelivered=0.0; // Sum of all bytes delivered this interval
   };
-#endif
 #endif

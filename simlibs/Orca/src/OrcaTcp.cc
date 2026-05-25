@@ -1,4 +1,3 @@
-#ifdef ORCA
 #include "OrcaTcp.h"
 
 Define_Module (OrcaTcp);
@@ -22,5 +21,3 @@ void TcpPacedConnection::computeRetransmissionRate()
     lastTotalRetransmittedBytes = totalRtxBytes;
     lastRetransmissionRateTime = simTime();
 }
-
-#endif

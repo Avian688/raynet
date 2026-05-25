@@ -1,6 +1,5 @@
 #include "omnetpp/clistener.h"
 #include "omnetpp/simkerneldefs.h"
-#ifdef ASTREA
 #ifndef __ASTREA_CC_H_
 #define __ASTREA_CC_H_
 
@@ -125,5 +124,4 @@ public: // General use
 
     double reward = 0; // Will automatically be set when globalStateResponse signal is received
   };
-#endif
 #endif

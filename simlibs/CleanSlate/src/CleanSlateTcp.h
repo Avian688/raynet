@@ -1,5 +1,4 @@
-// Written by Luca - Just a version of TCP that allows access to custom flavours (like my JamesCC)
-#ifdef CLEANSLATE
+// Written by Luca - Just a version of TCP that allows access to custom flavours
 #ifndef TRANSPORTLAYER_CleanSlateTcp_H_
 #define TRANSPORTLAYER_CleanSlateTcp_H_
 
@@ -19,4 +18,3 @@ public:
 };
 
 #endif /* TRANSPORTLAYER_CleanSlateTcp_H_ */
-#endif

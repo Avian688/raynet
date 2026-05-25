@@ -96,45 +96,8 @@ private:
 
 } // namespace rl
 
-
-#if !defined(RLRDP) && !defined(CARTPOLE) && !defined(ORCA) && !defined(JAMESCC) && !defined(CLEANSLATE) && !defined(ASTREA)
-#define CARTPOLE
-#endif
-
-#ifdef RLRDP
 using ObsType = rl::Observation;
 typedef float RewardType;
 typedef float ActionType;
-#endif
-
-#ifdef CARTPOLE
-using ObsType = rl::Observation;
-typedef int RewardType;
-typedef int ActionType;
-#endif
-
-#ifdef JAMESCC
-using ObsType = rl::Observation;
-typedef float RewardType;
-typedef float ActionType;
-#endif
-
-#ifdef ORCA
-using ObsType = rl::Observation;
-typedef float RewardType;
-typedef float ActionType;
-#endif
-
-#ifdef CLEANSLATE
-using ObsType = rl::Observation;
-typedef float RewardType;
-typedef float ActionType;
-#endif
-
-#ifdef ASTREA
-using ObsType = rl::Observation;
-typedef float RewardType;
-typedef float ActionType;
-#endif
 
 #endif

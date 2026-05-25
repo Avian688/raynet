@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <numeric>
 #include <ostream>
-#ifdef CLEANSLATE
 #include "CleanSlate.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
@@ -293,6 +292,3 @@ void CleanSlate::receivedDataAck(uint32_t firstSeqAcked) {
     TcpPacedNoCC::receivedDataAck(firstSeqAcked);
     this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
 }
-
-
-#endif

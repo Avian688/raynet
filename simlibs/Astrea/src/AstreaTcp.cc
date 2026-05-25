@@ -1,4 +1,3 @@
-#ifdef ASTREA
 #include "AstreaTcp.h"
 
 Define_Module (AstreaTcp);
@@ -22,5 +21,3 @@ void TcpPacedConnection::computeRetransmissionRate()
     lastTotalRetransmittedBytes = totalRtxBytes;
     lastRetransmissionRateTime = simTime();
 }
-
-#endif
