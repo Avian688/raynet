@@ -11,31 +11,33 @@ The system integrates the core Omnet++ discrete event simulator with its linked 
 <img src="/docs/images/libraries.png" width="600">
 
 Raynet requires (at least) the following third party (open-source) software:
-- **Omnet++**: Provides the underlying simulation framework. This fork adds partial support for version 6.3 that is unfinished. In particular, this version causes crashes on environment reset that are usually caught and handled by Ray/RLlib without issue. Alternatively, version 6.0 is more stable but may not work with newer versions of external dependencies like INET4.5.
-- **INET**: Provides useful simulation components relating to computer networks and congestion control. A custom version of INET4.5 was used for this project (https://github.com/Avian688/inet4.5) and is required for Orca, Astrea, CleanSlate, TcpPaced, and Cubic. Aiden Valentine is the author of this custom INET version as well as the TcpPaced and Cubic implementations in this project.
-- **Ray/RLlib**: RayNet supports all traditional RL workflows through `OmnetBindApi`, but Ray/RLlib is the most trivially supported and well-tested option for RayNet. Plus, the repo contains many Ray/RLlib examples to work off of.
-- **Python Modules:** Critical python modules like TensorFlow and PyTorch support training and evaluation scripts. A `requirements.txt` is provided that lists the essential modules, and `requirementsExtras.txt` provides **all** modules used in production of the final year project.
+- **Omnet++**: Provides the underlying simulation framework. This fork adds partial support for version 6.3 that is unfinished, but mostly functional. Alternatively, version 6.0 is more stable but may not work with newer versions of external dependencies like INET4.5.
+- **INET**: Provides useful simulation components relating to computer networks and congestion control. A custom version of INET4.5 was used for this project (https://github.com/Avian688/inet4.5) and is required for Orca, Astrea, CleanSlate, TcpPaced, and Cubic. Several other simulation libraries by the same author were also utilized, including TcpPaced, Cubic, and more. These are assumed to be installed at `~/omnetpp/samples/`.
+- **Ray/RLlib**: RayNet supports all traditional RL workflows by exposing a flexible simulation control API `OmnetBindApi`. However, Ray/RLlib is trivially supported and the recommended option for RayNet.
+- **Python Modules:** Critical python modules like TensorFlow and PyTorch support training and evaluation scripts. A `requirements.txt` is provided that lists the essential modules, and `requirements-extra.txt` additionally provides **all** modules used in production of the final year project.
 
-OMNeT++ and INET are assumed to be installed the HOME directory. If this is an issue, feel free to alter `build.sh` and `cmakelists.txt` to support your needs or create symbolic links to your existing OMNeT++/INET directories.
+OMNeT++ and INET are assumed to be installed the HOME directory. If this is an issue, you may alter `build.sh`/`cmakelists.txt` or create symbolic links in the correct locations.
 
-## RayNet Components
+## Important RayNet Directories
 - **src**: contains the binding API and a environment interface inspired by OMNeT++'s `cmdenv`. The contents of this directory collectively make up the simulation wrapper and will be compiled in to the `build` directory.
 
-- **RLComponents**: contains critical simulation components like the `Broker`. In addition to some helper classes, it also crucially contains `typedefs.h`, which is where observation types are defined on a per-protocol basis. If you wish to make your own protocol, you'll need to add a few lines to this header file.
+- **RLComponents**: contains critical simulation components like the `Broker` in addition to some helper classes.
 
-- **simlibs**: contains various user-provided simulation libraries. This includes RL-driven CC schemes written for RayNet like `Orca` and `Astraea` as well as generally useful OMNeT++ components like `cubic` and `TcpPaced`. Users wishing to add functionality to their simulations are encouraged to put any relevant code here.
+- **simlibs**: contains various user-provided simulation libraries. This includes RL-driven CC schemes like `Orca` and `Astraea` as well as generally useful OMNeT++ components like `tcpPacedNoCC`. Users are encouraged to add any custom components here.
 
-## Evaluation Directories
-A collection of directories intended for evaluation scripts, topologies, results, plots, etc. are provided for your convenience. These directories include:
+## FYP Evaluation Directories
+As part of the final year project submission, several evaluation directories were created to support general experimentation. Users are welcome to use these as examples for plotting experiment results, but they are mostly fit-to-purpose and not intended to be generally useful.
 - **_experiments**: Contains configuartion and scenario files to support experimentation.
 - **_plots**: Evaluation scripts will automatically output aggregate plots here.
 - **_results**: The experiment runner will parse simulation vector outputs, compile them into `.csv` files, and save them to this directory.
 - **_scripts**: Used for various python scripts. By default, this contains an experiment runner and plotting script.
 - **_topologies**: Intended to contain generally useful topologies to be shared among many experiments and training environments. Currently only contains a dumbbell topology.
 
+These directories will likely be refactored after marking is complete.
+
 ## Building instrutions
 
-Once the required exteernal dependencies listed above are installed, RayNet is ready to be installed.
+Once the required dependencies (OMNet++ and INET) are installed, RayNet is ready to be built.
 
 ### Step 1 - Clone this repo
 Clone this repository and its submodules
@@ -45,7 +47,7 @@ git clone --recurse-submodules -j8
 
 ### Step 2 - Run the build script
 
-Navigate to the RayNet directory and run the build script. 
+Navigate to the RayNet directory and run the build script, which will automatically compile and link RayNet to OMNeT++, INET, and any simulation libraries contained in `raynet/simlibs`. 
 ```
 cd ~/raynet
 ./build.sh
