@@ -193,7 +193,13 @@ if __name__ == '__main__':
                     10000000000                    #pacerate
                     ], dtype=np.float32), stacking)
         
-    ray.init(local_mode=True)
+    ray.init(
+        local_mode=True,
+        include_dashboard=False,
+        ignore_reinit_error=True,
+        _temp_dir=f"/tmp/ray_{os.getpid()}",
+        num_cpus=1
+    )
     config = (
             SACConfig()
             .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
