@@ -5,6 +5,13 @@ else
     LIB_SUFFIX = 
 endif
 
+RAYNET_HOME ?= $(abspath ../..)
+OMNETPP_ROOT ?= $(HOME)/omnetpp
+OMNETPP_SAMPLES_ROOT ?= $(OMNETPP_ROOT)/samples
+INET_ROOT ?= $(lastword $(sort $(wildcard $(OMNETPP_SAMPLES_ROOT)/inet*)))
+TCPPACED_ROOT ?= $(OMNETPP_SAMPLES_ROOT)/tcpPaced
+CUBIC_ROOT ?= $(OMNETPP_SAMPLES_ROOT)/cubic
+
 all: checkmakefiles
 	cd src && $(MAKE)
 
@@ -17,7 +24,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake -o Astrea --make-so -f --deep --mode ${MODE} -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX} -I${HOME}/omnetpp/samples/tcpPaced/src -L${HOME}/omnetpp/samples/tcpPaced/src -ltcpPaced${LIB_SUFFIX}  -I${HOME}/omnetpp/samples/cubic/src -L${HOME}/omnetpp/samples/cubic/src -lcubic${LIB_SUFFIX} -I${HOME}/raynet/simlibs/tcpPacedNoCC/src -L${HOME}/raynet/simlibs/tcpPacedNoCC/src -ltcpPacedNoCC${LIB_SUFFIX} 
+	cd src && opp_makemake -o Astrea --make-so -f --deep --mode ${MODE} -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${INET_ROOT}/src -L${INET_ROOT}/src -lINET${LIB_SUFFIX} -I${TCPPACED_ROOT}/src -L${TCPPACED_ROOT}/src -ltcpPaced${LIB_SUFFIX}  -I${CUBIC_ROOT}/src -L${CUBIC_ROOT}/src -lcubic${LIB_SUFFIX} -I${RAYNET_HOME}/simlibs/tcpPacedNoCC/src -L${RAYNET_HOME}/simlibs/tcpPacedNoCC/src -ltcpPacedNoCC${LIB_SUFFIX} 
 
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \

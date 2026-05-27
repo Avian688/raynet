@@ -1,6 +1,9 @@
-ray
+ray==2.53.0; platform_system != "Darwin" or platform_machine != "x86_64"
+ray==2.49.2; platform_system == "Darwin" and platform_machine == "x86_64"
 gymnasium
-ray[tune]
+ray[tune]==2.53.0; platform_system != "Darwin" or platform_machine != "x86_64"
+ray[tune]==2.49.2; platform_system == "Darwin" and platform_machine == "x86_64"
+numpy<2; platform_system == "Darwin" and platform_machine == "x86_64"
 dm_tree
 scipy
 torch
@@ -8,3 +11,4 @@ lz4
 matplotlib
 pypdf
 GPUtil
+setuptools==80.10.1

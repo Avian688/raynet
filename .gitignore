@@ -214,3 +214,6 @@ Debug
 
 !ndp_simple_sims/*
 *:Zone.Identifier
+# Raynet generated logs
+_logs/
+*.log

@@ -9,6 +9,11 @@ import random
 import sys
 from collections import deque
 
+sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+from raynet_numpy_compat import install_numpy_core_aliases
+install_numpy_core_aliases()
+from raynet_paths import normalize_raynet_ini_text
+
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import TD3
@@ -81,7 +86,9 @@ class OmnetGymApiEnv(gym.Env):
 
         with open(original_ini_file, "r", encoding="utf-8") as fin:
             ini_string = fin.read()
+        ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("HOME", os.getenv("HOME"))
+        ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
         ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt / 2.0}ms")
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")

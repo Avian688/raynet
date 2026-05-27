@@ -16,7 +16,7 @@ Raynet requires (at least) the following third party (open-source) software:
 - **Ray/RLlib**: RayNet supports all traditional RL workflows by exposing a flexible simulation control API `OmnetBindApi`. However, Ray/RLlib is trivially supported and the recommended option for RayNet.
 - **Python Modules:** Critical python modules like TensorFlow and PyTorch support training and evaluation scripts. A `requirements.txt` is provided that lists the essential modules, and `requirements-extra.txt` additionally provides **all** modules used in production of the final year project.
 
-OMNeT++ and INET are assumed to be installed the HOME directory. If this is an issue, you may alter `build.sh`/`cmakelists.txt` or create symbolic links in the correct locations.
+The build can use several local OMNeT++ installs. By default, `build.sh` selects the newest real `~/omnetpp-*` directory and then looks for INET under that install's `samples/inet*` directory. You can override those choices with `OMNETPP_ROOT`, `INET_ROOT`, or the `build.sh` flags documented below.
 
 ## Important RayNet Directories
 - **src**: contains the binding API and a environment interface inspired by OMNeT++'s `cmdenv`. The contents of this directory collectively make up the simulation wrapper and will be compiled in to the `build` directory.
@@ -54,17 +54,21 @@ cd ~/raynet
 ```
 This process should be repeated any time you make changes to C++ code within the project or its simulation libraries. A few optional flags were provided for convenience, users are encouraged to explore `./build.sh`.
 
-This build script (and project as a whole) assumes you have OMNeT++ installed at `~/omnetpp`. If yours is installed elsewhere, you can either move it, create a symblic link at the correct location, or modify RayNet yourself.
-
-### Step 3 - Python environmnet
-
-A python environment with the modules specified in `requirements.txt` must be created prior to running RayNet. This may be the same environment used by your OMNeT++ installation if you wish, but a dedicated environment is recommended to avoid version conflicts:
+If auto-detection picks the wrong install, choose paths explicitly:
 ```
-python3 -m venv .venv
+./build.sh -o ~/omnetpp-6.3.0 -i ~/omnetpp-6.3.0/samples/inet4.5
+```
+The same paths can be supplied via environment variables such as `OMNETPP_ROOT`, `INET_ROOT`, `TCPPACED_ROOT`, and `CUBIC_ROOT`.
+
+### Step 3 - Python environment
+
+A Python environment with the modules specified in `requirements.txt` must be created prior to running RayNet. This may be the same environment used by your OMNeT++ installation if you wish, but a dedicated environment is recommended to avoid version conflicts:
+```
+./create-venv.sh
 source .venv/bin/activate
-pip install -r requirements.txt
 ```
-`requirements-extra.txt` contains extra optional modules and specific versions if needed.
+`requirements-extra.txt` contains extra optional modules and specific versions if needed. Install that larger pinned environment with `./create-venv.sh --extra`; CUDA/NVIDIA packages are skipped automatically on macOS.
+On Apple Silicon Macs, RayNet's Python architecture must match the OMNeT++/`omnetbind` architecture. For a Rosetta/x86_64 OMNeT++ install, use `./create-venv.sh --recreate --arch x86_64`; this selects the compatible macOS x86_64 Ray pin. For native arm64 OMNeT++, use `./create-venv.sh --recreate --arch arm64`.
 
 ## Usage
 The easiest way to use RayNet is with the provided runner script `raynet/_scripts/run/raynet_runner.py`, which can use a trained model to perform inference on any RayNet-ready `.ini`.
@@ -85,4 +89,3 @@ Refer to the Orca simlib for general usage examples. This contains examples of a
 
 
 [![DOI](https://zenodo.org/badge/561974777.svg)](https://zenodo.org/badge/latestdoi/561974777)
-

@@ -5,6 +5,11 @@ else
     LIB_SUFFIX = 
 endif
 
+RAYNET_HOME ?= $(abspath ../..)
+OMNETPP_ROOT ?= $(HOME)/omnetpp
+OMNETPP_SAMPLES_ROOT ?= $(OMNETPP_ROOT)/samples
+INET_ROOT ?= $(lastword $(sort $(wildcard $(OMNETPP_SAMPLES_ROOT)/inet*)))
+
 all: checkmakefiles
 	cd src && $(MAKE)
 
@@ -17,7 +22,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode ${MODE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX}
+	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode ${MODE} -I${INET_ROOT}/src -L${INET_ROOT}/src -lINET${LIB_SUFFIX}
 
 
 checkmakefiles:

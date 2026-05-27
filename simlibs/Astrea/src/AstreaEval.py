@@ -1,5 +1,10 @@
 
 import sys, os
+sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
+install_numpy_core_aliases()
+install_rllib_checkpoint_compat()
+from raynet_paths import materialize_raynet_ini
 from ray.runtime_env import RuntimeEnv
 import gymnasium as gym
 from gymnasium import spaces, logger
@@ -164,7 +169,7 @@ if __name__ == '__main__':
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
     stacking = 5
     
-    env_config = {"iniPath": sys.argv[1],
+    env_config = {"iniPath": materialize_raynet_ini(sys.argv[1]),
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,

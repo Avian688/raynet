@@ -1,4 +1,9 @@
 import sys, os
+sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
+install_numpy_core_aliases()
+install_rllib_checkpoint_compat()
+from raynet_paths import normalize_raynet_ini_text
 from ray.runtime_env import RuntimeEnv
 import gymnasium as gym
 from gymnasium import spaces
@@ -111,7 +116,9 @@ class OmnetGymApiEnv(gym.Env):
         ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
+        ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
+        ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("CLEANSLATE_BOTTLENECK_BW", f"{self.bw}Mbps")
         ini_string = ini_string.replace("CLEANSLATE_BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
         ini_string = ini_string.replace("CLEANSLATE_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")

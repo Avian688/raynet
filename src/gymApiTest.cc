@@ -10,17 +10,18 @@ using namespace omnetpp;
 
 int main(int argc, char **argv){
     std::string HOME(getenv("HOME"));
-    std::string NEDPATH = "NEDPATH="+HOME + "/raynet/simulations;"+HOME+"/raynet/simlibs/RLComponents/src;"+HOME+"/raynet/simlibs/ecmp/src;"+HOME+"/raynet/simlibs/TcpPaced/src;"+HOME+"/raynet/simlibs/RLCC/src;"+HOME+"/raynet/simlibs/rdp/src;"+HOME+"/inet4.5/src/inet;"+HOME+"/inet4.5/examples";
+    std::string RAYNET_HOME = getenv("RAYNET_HOME") ? getenv("RAYNET_HOME") : HOME + "/raynet";
+    std::string OMNETPP_ROOT = getenv("OMNETPP_ROOT") ? getenv("OMNETPP_ROOT") : HOME + "/omnetpp";
+    std::string INET_ROOT = getenv("INET_ROOT") ? getenv("INET_ROOT") : OMNETPP_ROOT + "/samples/inet4.5";
     cout << "Home: " << HOME << endl;
-    //putenv(NEDPATH.c_str());
-    setenv("NEDPATH", (HOME + "/raynet/simulations;" +
-                   HOME + "/raynet/simlibs/RLComponents/src;" +
-                   HOME + "/raynet/simlibs/ecmp/src;" +
-                   HOME + "/raynet/simlibs/TcpPaced/src;" +
-                   HOME + "/raynet/simlibs/RLCC/src;" +
-                   HOME + "/raynet/simlibs/rdp/src;" +
-                   HOME + "/inet4.5/src/inet;" +
-                   HOME + "/inet4.5/examples")
+    setenv("NEDPATH", (RAYNET_HOME + "/simulations;" +
+                   RAYNET_HOME + "/simlibs/RLComponents/src;" +
+                   RAYNET_HOME + "/simlibs/ecmp/src;" +
+                   RAYNET_HOME + "/simlibs/TcpPaced/src;" +
+                   RAYNET_HOME + "/simlibs/RLCC/src;" +
+                   RAYNET_HOME + "/simlibs/rdp/src;" +
+                   INET_ROOT + "/src/inet;" +
+                   INET_ROOT + "/examples")
                    .c_str(), 1);
 
     // TODO: Initialise CmdRllibenv. This class will be bound to Python.
@@ -28,7 +29,7 @@ int main(int argc, char **argv){
     std::string _iniPath;
     ObsType  obs;
 
-    _iniPath = (string(getenv("HOME"))+string("/raynet/configs/orca/orca.ini")).c_str();
+    _iniPath = RAYNET_HOME + "/configs/orca/orca.ini";
 
     GymApi* gymapi = new GymApi();
    

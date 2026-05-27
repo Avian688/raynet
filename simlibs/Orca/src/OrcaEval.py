@@ -1,4 +1,9 @@
 import sys, os
+sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
+install_numpy_core_aliases()
+install_rllib_checkpoint_compat()
+from raynet_paths import materialize_raynet_ini
 from ray.runtime_env import RuntimeEnv
 import gymnasium as gym
 from gymnasium import spaces
@@ -19,8 +24,6 @@ from ray.rllib.algorithms.sac.sac import SAC
 import os
 import time
 from random import randint
-from ray.tune.analysis import ExperimentAnalysis
-import GPUtil
 from collections import deque
 import torch
 
@@ -154,7 +157,7 @@ if __name__ == '__main__':
     
     load_from_checkpoint = True
     checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca"
-    env_config = {"iniPath": sys.argv[1],
+    env_config = {"iniPath": materialize_raynet_ini(sys.argv[1]),
                   "config_section": sys.argv[2] if len(sys.argv) > 2 else "Orca", # Optional argument to specifcy which config.ini section to run. Orca by default.
                   "stacking": 10}
     
