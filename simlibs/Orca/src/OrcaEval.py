@@ -24,7 +24,7 @@ from ray.rllib.algorithms.sac.sac import SAC
 import os
 import time
 from random import randint
-from collections import deque
+from collections import defaultdict, deque
 import torch
 
 class OmnetGymApiEnv(gym.Env):
@@ -74,55 +74,88 @@ class OmnetGymApiEnv(gym.Env):
             high=self.obs_max, 
             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
         
-        # Create empty observation history deque
         self.num_observations = 7
-        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
+        self.obs_history = defaultdict(self._new_obs_history)
+        self.last_obs_by_agent = {}
         
+    def _new_obs_history(self):
+        return deque(
+            np.zeros(self.stacking * self.num_observations, dtype=np.float32),
+            maxlen=self.stacking * self.num_observations,
+        )
+
+    def _stack_agent_obs(self, agent_id, agent_obs, reset=False):
+        if reset:
+            self.obs_history[agent_id] = self._new_obs_history()
+
+        agent_obs = np.asarray(agent_obs, dtype=np.float32)
+        if reset:
+            for _ in range(self.stacking):
+                self.obs_history[agent_id].extend(agent_obs)
+        self.obs_history[agent_id].extend(agent_obs)
+        return np.asarray(list(self.obs_history[agent_id]), dtype=np.float32)
+
+    def _stack_obs_map(self, obs_map, reset=False):
+        stacked = {}
+        for agent_id, agent_obs in obs_map.items():
+            if agent_id == "SIMULATION_END":
+                continue
+            stacked[agent_id] = self._stack_agent_obs(agent_id, agent_obs, reset=reset)
+        self.last_obs_by_agent = stacked
+        return stacked
+
+    def _coerce_action_map(self, actions):
+        if isinstance(actions, dict):
+            return {
+                agent_id: float(np.asarray(action, dtype=np.float32).reshape(-1)[0])
+                for agent_id, action in actions.items()
+            }
+
+        if len(self.last_obs_by_agent) != 1:
+            raise ValueError(
+                f"Expected an action dict for agents {sorted(self.last_obs_by_agent)}, got a single action."
+            )
+
+        agent_id = next(iter(self.last_obs_by_agent))
+        return {agent_id: float(np.asarray(actions, dtype=np.float32).reshape(-1)[0])}
+
        
     def reset(self, *, seed=None, options=None):
-        # Reset the observation history to empty
-        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
-        
+        self.obs_history = defaultdict(self._new_obs_history)
+        self.last_obs_by_agent = {}
         
         self.runner.initialise(self.env_config["iniPath"], self.env_config["config_section"])
         
         
         obs = self.runner.reset()
-        
-        # Pull the initial observation and store return it to the trainer
-        obs = obs['Orca']
-        for i in range(self.stacking):
-            self.obs_history.extend(obs)    # Reset only - fill the obs_history with copies of first obs instead of 0's
-        self.obs_history.extend(obs)
-        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        return  return_obs_history, {}
+        return self._stack_obs_map(obs, reset=True), {}
 
     def step(self, actions):
-        # Forward the action to our agent
-        actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
-        action = {'Orca': actions}
+        action = self._coerce_action_map(actions)
         obs, rewards, terminateds, info_ = self.runner.step(action)
         if info_['simDone']:
             self.runner.cleanup()
-            return_obs_history = np.asarray(list(self.obs_history), dtype=np.float32)
-            return return_obs_history, rewards.get('Orca', 0.0), False, True, {}
+            truncateds = {agent_id: True for agent_id in self.last_obs_by_agent}
+            truncateds["__all__"] = True
+            terminateds = dict(terminateds)
+            terminateds["__all__"] = bool(terminateds.get("__all__", False))
+            return {}, rewards, terminateds, truncateds, {}
 
-        self.obs_history.extend(obs['Orca'])
+        return_obs_history = self._stack_obs_map(obs)
+        raw_terminateds = terminateds
+        rewards = {agent_id: float(rewards.get(agent_id, 0.0)) for agent_id in return_obs_history}
+        terminateds = {
+            agent_id: bool(raw_terminateds.get(agent_id, False))
+            for agent_id in return_obs_history
+        }
+        terminateds["__all__"] = bool(raw_terminateds.get("__all__", False))
+        truncateds = {agent_id: False for agent_id in return_obs_history}
+        truncateds["__all__"] = False
         
-        # Extract obs/rewards from our agent
-        obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
-        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        #TODO: Append this to self.obs_history and return that instead. 
-        reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
-        sim_truncated = False
-        
-        # Check if this training episode is complete
-        if terminateds['Orca']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+        if terminateds["__all__"]:
             print(terminateds)
             self.runner.shutdown()
             self.runner.cleanup()
-        if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
-            sim_truncated = True
         
         # Debug
         printFreq = 1
@@ -130,20 +163,22 @@ class OmnetGymApiEnv(gym.Env):
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
-            print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
-            print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
-            print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
-            print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
-            print(f"\t\tDelay: {obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
+            debug_agent, debug_obs = next(iter(return_obs_history.items()))
+            print(f"\t\tAgent: {debug_agent}")
+            print(f"\t\tThroughput: {debug_obs[0]:.2f}%             \t\t(Normalized, per interval)")
+            print(f"\t\tPacing Rate: {debug_obs[1]:.2f}%        \t\t(Normalized, per interval)")
+            print(f"\t\tLoss Rate: {debug_obs[2]:.2f}%          \t\t(Normalized, per interval)")
+            print(f"\t\tACKs: {debug_obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
+            print(f"\t\tInterval time: {debug_obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
+            print(f"\t\tSRTT: {debug_obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
+            print(f"\t\tDelay: {debug_obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
             
             print(f"\tRewards:")
-            print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
+            print(f"\t\tREWARD: {rewards.get(debug_agent, 0.0):.5f}                  \t(Raw, per interval)")
         self.step_count += 1
         
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
+        return return_obs_history, rewards, terminateds, truncateds, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
@@ -172,7 +207,7 @@ if __name__ == '__main__':
             SACConfig()
             # .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
             .env_runners(explore=False) #, rollout_fragment_length=1000
-            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
+            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
             )
     algo = config.build_algo()
     
@@ -189,21 +224,23 @@ if __name__ == '__main__':
     steps = 0
     check_in_freq = 100
     env = OmnetGymApiEnv(env_config)
-    obs, _ = env.reset()
+    obs_by_agent, _ = env.reset()
     module = algo.get_module("default_module")
     while True:
-        obs_batch = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
-        with torch.no_grad():
-            out = module.forward_inference({"obs": obs_batch})
+        actions = {}
+        for agent_id, obs in obs_by_agent.items():
+            obs_batch = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+            with torch.no_grad():
+                out = module.forward_inference({"obs": obs_batch})
 
-        action = module.get_inference_action_dist_cls().from_logits(
-            out["action_dist_inputs"]
-        ).sample()[0].cpu().numpy()
+            actions[agent_id] = module.get_inference_action_dist_cls().from_logits(
+                out["action_dist_inputs"]
+            ).sample()[0].cpu().numpy()
 
-        obs, reward, terminated, truncated, _ = env.step(action)
+        obs_by_agent, rewards, terminateds, truncateds, _ = env.step(actions)
 
         if steps % check_in_freq == 0:
-            print(f"Step {steps}, reward={reward}")
+            print(f"Step {steps}, rewards={rewards}")
         steps += 1
-        if terminated or truncated:
+        if terminateds.get("__all__", False) or truncateds.get("__all__", False) or not obs_by_agent:
             break

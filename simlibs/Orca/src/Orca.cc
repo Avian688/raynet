@@ -10,12 +10,43 @@
 #include "Orca.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
+#include <cctype>
+#include <string>
 
 using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
 Register_Class(Orca); // Lets omnet see and use this class
+
+namespace {
+
+std::string sanitizeAgentId(std::string id)
+{
+    for (char& c : id) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            c = '_';
+        }
+    }
+    return id;
+}
+
+std::string makeOrcaAgentId(cComponent *owner)
+{
+    cModule *tcpModule = dynamic_cast<cModule *>(owner);
+    cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
+    int hostIndex = hostModule ? hostModule->getIndex() : -1;
+
+    if (hostIndex == 0) {
+        return "Orca";
+    }
+    if (hostIndex > 0) {
+        return "Orca" + std::to_string(hostIndex);
+    }
+    return "Orca_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
+}
+
+}
 
 Orca::Orca():
     TcpCubic(), RLInterface() {
@@ -63,7 +94,7 @@ void Orca::established(bool active) {
         this->isActive = active;
 
         // Set the RayNet ID of this agent and register with the Broker
-        RLInterface::setStringId("Orca");
+        RLInterface::setStringId(makeOrcaAgentId(owner));
         cObject* simtime = new cSimTime(0); // Used to contain initial step length, now deprecated.
         owner->emit(this->registerSig, stringId.c_str(), simtime); 
 
@@ -194,6 +225,8 @@ RewardType Orca::computeReward(){
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Orca::decisionMade(ActionType action) {
     if (debug) cout << "\tOrca: decisionMade()" << endl;
+
+    std::cout << "\n ACTION: " << stringId << endl;
 
     // Compute new cwnd from the given action (cwnd *= 2^action)
     double multiplier = std::pow(2.0, (double) action);
