@@ -1,6 +1,19 @@
 
 import sys, os
-sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+from pathlib import Path
+
+def _raynet_home_from_here():
+    configured = os.environ.get("RAYNET_HOME")
+    if configured:
+        configured_path = Path(configured).expanduser().resolve(strict=False)
+        if configured_path.is_dir():
+            return str(configured_path)
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "raynet_paths.py").is_file():
+            return str(parent)
+    return os.path.join(os.getenv("HOME", ""), "raynet")
+
+sys.path.insert(0, _raynet_home_from_here())
 from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
 install_numpy_core_aliases()
 install_rllib_checkpoint_compat()

@@ -5,25 +5,33 @@ import pandas as pd
 import numpy as np
 import random
 from pathlib import Path
-import os
-import subprocess
 import re
+import sys
 import time as termTime
 import xml.etree.ElementTree as ET
 
-experiments_dir = f"{os.getenv('HOME')}/raynet/_experiments"
+repo_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(repo_root))
+
+from raynet_paths import normalize_raynet_ini_text, raynet_home
+
+RAYNET_HOME = raynet_home()
+EXPERIMENTS_DIR = RAYNET_HOME / "_experiments"
+RESULTS_DIR = RAYNET_HOME / "_results"
+
+experiments_dir = str(EXPERIMENTS_DIR)
 experiment_paths = {
-    "single-flow": f"{experiments_dir}/single-flow/single-flow.ini",
-    "competing-flows": f"{experiments_dir}/competing-flows/competing-flows.ini",
-    "responsiveness": f"{experiments_dir}/responsiveness/responsiveness.ini",
+    "single-flow": str(EXPERIMENTS_DIR / "single-flow" / "single-flow.ini"),
+    "competing-flows": str(EXPERIMENTS_DIR / "competing-flows" / "competing-flows.ini"),
+    "responsiveness": str(EXPERIMENTS_DIR / "responsiveness" / "responsiveness.ini"),
 }
 
 runner_paths = {
-    "Orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
-    "OrcaPaper": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval_paper.py",
-    "Cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
-    "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
-    "CleanSlate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
+    "Orca": str(RAYNET_HOME / "simlibs" / "Orca" / "src" / "OrcaEval.py"),
+    "OrcaPaper": str(RAYNET_HOME / "simlibs" / "Orca" / "src" / "OrcaEval_paper.py"),
+    "Cubic": str(RAYNET_HOME / "simlibs" / "Orca" / "src" / "CubicEval.py"),
+    "Astrea": str(RAYNET_HOME / "simlibs" / "Astrea" / "src" / "AstreaEval.py"),
+    "CleanSlate": str(RAYNET_HOME / "simlibs" / "CleanSlate" / "src" / "CleanSlateEval.py"),
 }
 
 def parse_numeric(value): 
@@ -134,12 +142,9 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 modName = re.sub(r'(conn)-\d+', r'\1', modName)
                 
                 final_list = pd.DataFrame({'time': time, str(vec): val})
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/_results/' + exp_nickname + "/" + short_params_str, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/_results/' + exp_nickname + "/" + short_params_str + f"/run{run}", shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/_results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/_results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/", shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/_results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/" + str(modName), shell=True).communicate(timeout=40)
-                csv_path = os.getenv('HOME') + '/raynet/_results/'+ exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/" + str(modName) + "/" + vec + '.csv'
+                csv_dir = RESULTS_DIR / exp_nickname / short_params_str / f"run{run}" / protocol_nickname / "csvs" / str(modName)
+                csv_dir.mkdir(parents=True, exist_ok=True)
+                csv_path = csv_dir / f"{vec}.csv"
                 final_list.to_csv(csv_path, index=False)
                 extracted = True
                 if (do_dumb_plots): 
@@ -186,17 +191,10 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
             })
 
             # Create directory: .../scenario/
-            base_dir = (
-                os.getenv('HOME')
-                + '/raynet/_results/'
-                + exp_nickname + "/"
-                + short_params_str + f"/run{run}/"
-                + protocol_nickname + "/csvs/scenario/"
-            )
+            base_dir = RESULTS_DIR / exp_nickname / short_params_str / f"run{run}" / protocol_nickname / "csvs" / "scenario"
+            base_dir.mkdir(parents=True, exist_ok=True)
 
-            subprocess.Popen(f"mkdir -p {base_dir}", shell=True).communicate(timeout=40)
-
-            csv_path = base_dir + f"{par_name}.csv"
+            csv_path = base_dir / f"{par_name}.csv"
             df.to_csv(csv_path, index=False)
 
             print(f"Saved scenario CSV: {csv_path}")
@@ -207,7 +205,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
     Runs the given experiment for each protocol listed, using their respective eval runner scripts
     - This is admittedly very messy and was developed in a time crunch for the dissertation, but it gets the job done and can be cleaned up later if needed
     """
-    python = f"{os.getenv('HOME')}/raynet/.venv/bin/python"
+    python = os.environ.get("RAYNET_PYTHON", str(RAYNET_HOME / ".venv" / "bin" / "python"))
     
     # Perform each experiment with each protocol and parameter combination
     for experiment_name in experiments_dict.keys():
@@ -225,7 +223,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
             for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
                 with open(original_ini_file, 'r') as fin:
                     ini_string = fin.read()
-                ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
+                ini_string = normalize_raynet_ini_text(ini_string)
                 ini_string = ini_string.replace("START_TIME_PLACEHOLDER",  str(random.uniform(0, 0.2)))
                 
                 params_suffix = ""
@@ -323,7 +321,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
                     os.system(f"{python} {protocol_runner_path} {modified_ini_file}") # Finally runs the exp
                     
                     # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
-                    exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results/"
+                    exp_results_dir = str(EXPERIMENTS_DIR / experiment_name / "ini_variants" / "results") + "/"
                     generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix, run=run)
         
 """

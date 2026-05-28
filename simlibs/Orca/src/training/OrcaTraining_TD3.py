@@ -8,8 +8,20 @@ import os
 import random
 import sys
 from collections import deque
+from pathlib import Path
 
-sys.path.insert(0, os.environ.get("RAYNET_HOME", os.path.join(os.getenv("HOME"), "raynet")))
+def _raynet_home_from_here():
+    configured = os.environ.get("RAYNET_HOME")
+    if configured:
+        configured_path = Path(configured).expanduser().resolve(strict=False)
+        if configured_path.is_dir():
+            return str(configured_path)
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "raynet_paths.py").is_file():
+            return str(parent)
+    return os.path.join(os.getenv("HOME", ""), "raynet")
+
+sys.path.insert(0, _raynet_home_from_here())
 from raynet_numpy_compat import install_numpy_core_aliases
 install_numpy_core_aliases()
 from raynet_paths import normalize_raynet_ini_text
