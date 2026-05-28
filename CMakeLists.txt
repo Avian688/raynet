@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_DEBUG_POSTFIX _dbg)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum policy version for vendored CMake projects")
 
 # For each simlib in the simlib directory, add it to link libraries
 file(GLOB SIMLIB_DIRS RELATIVE ${PROJECT_SOURCE_DIR}/simlibs ${PROJECT_SOURCE_DIR}/simlibs/*)

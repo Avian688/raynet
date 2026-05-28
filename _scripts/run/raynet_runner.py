@@ -33,6 +33,10 @@ def is_verbose() -> bool:
     return os.environ.get("RAYNET_VERBOSE", "").lower() in {"1", "true", "yes", "on"}
 
 
+def logs_enabled() -> bool:
+    return os.environ.get("RAYNET_LOG_OUTPUT", "1").lower() not in {"0", "false", "no", "off", "none"}
+
+
 def log_path_for(protocol: str, ini_path: str, section: str) -> Path:
     log_dir = raynet_home / "_logs" / "raynet_runner"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -67,11 +71,24 @@ def run_simulation(protocol:str, ini_path:str, section:str="General"):
     
     print("----------------------------------------")
     print(f"RayNet: Running protocol {protocol} \n\tRunner: {runner} \n\t.ini file: {prepared_ini_path} \n\tSection: {section}")
-    if not is_verbose():
+    if not is_verbose() and logs_enabled():
         print(f"\tLog: {log_path}")
+    elif not is_verbose():
+        print("\tLog: disabled")
     print("----------------------------------------")
     if is_verbose():
         subprocess.run([python, runner, prepared_ini_path, section], check=True)
+        return
+
+    if not logs_enabled():
+        result = subprocess.run(
+            [python, runner, prepared_ini_path, section],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode != 0:
+            print("RayNet: simulation failed. Re-run with RAYNET_LOG_OUTPUT=1 or RAYNET_VERBOSE=1 for details.")
+            sys.exit(result.returncode)
         return
 
     with log_path.open("w", encoding="utf-8") as log_file:
