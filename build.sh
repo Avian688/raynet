@@ -2,6 +2,10 @@
 set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+build_config="${RAYNET_BUILD_CONFIG:-$script_dir/.raynet-build.env}"
+if [ -f "$build_config" ]; then
+    source "$build_config"
+fi
 export RAYNET_HOME="${RAYNET_HOME:-$script_dir}"
 host_system="$(uname -s)"
 host_machine="$(uname -m)"
@@ -43,6 +47,10 @@ Usage: ${0##*/} [-h] [-m BUILDMODE] [-o OMNETPP_ROOT] [-i INET_ROOT]...
        -m BUILDMODE  chose between release and debug modes. Defaults to release.
        -o ROOT       use a specific OMNeT++ root. Defaults to OMNETPP_ROOT or newest ~/omnetpp-*.
        -i ROOT       use a specific INET root. Defaults to INET_ROOT or OMNETPP_ROOT/samples/inet*.
+
+Environment:
+       RAYNET_BUILD_CONFIG  optional config file to source before building.
+                            Defaults to .raynet-build.env in the RayNet root.
 EOF
 }
    
@@ -255,10 +263,41 @@ if command -v xcrun >/dev/null 2>&1; then
         macosx_sdk_arg=(-DCMAKE_OSX_SYSROOT="$macosx_sdk_path")
     fi
 fi
-python_executable_arg=()
-if [ -n "$raynet_python" ]; then
-    python_executable_arg=(-DPython3_EXECUTABLE="$raynet_python")
+
+cmake_arch_arg=()
+if [ "$host_system" = "Darwin" ]; then
+    cmake_arch_arg=(-DCMAKE_OSX_ARCHITECTURES="$target_arch")
 fi
+
+python_cmake_args=(-DPython3_FIND_VIRTUALENV=FIRST)
+if [ -n "$raynet_python" ]; then
+    python_cmake_args+=(-DPython3_EXECUTABLE="$raynet_python")
+    python_include=$("$raynet_python" - <<'PY'
+import os
+import sysconfig
+
+seen = set()
+for value in (
+    sysconfig.get_path("include"),
+    sysconfig.get_path("platinclude"),
+    sysconfig.get_config_var("INCLUDEPY"),
+):
+    if not value or value in seen:
+        continue
+    seen.add(value)
+    if os.path.isfile(os.path.join(value, "Python.h")):
+        print(value)
+        break
+PY
+)
+    if [ -n "$python_include" ]; then
+        python_cmake_args+=(-DPython3_INCLUDE_DIR="$python_include")
+    else
+        echo "Warning: could not locate Python.h for $raynet_python. Install the matching python3-dev package if CMake cannot find it." >&2
+    fi
+fi
+
+cmake_python_cache_unset_args=(-U "Python3_*" -U "_Python3_*" -U "Python_*" -U "_Python_*" -U "PYTHON_*" -U "PYBIND11_PYTHON_*")
 
 # List of simlibs. Any simlib that needs to be compiled FIRST (eg. is a dependency) should be added here, rather than the loop.
 simlibs=("$RAYNET_HOME/simlibs/RLComponents"
@@ -339,9 +378,10 @@ cd build
 echo "Building RayNet..."
 echo "---------------------------------"
 cmake -DCMAKE_BUILD_TYPE=$mode \
+    "${cmake_python_cache_unset_args[@]}" \
     "${macosx_sdk_arg[@]}" \
-    "${python_executable_arg[@]}" \
-    -DCMAKE_OSX_ARCHITECTURES="$target_arch" \
+    "${cmake_arch_arg[@]}" \
+    "${python_cmake_args[@]}" \
     -DOMNETPP_ROOT="$OMNETPP_ROOT" \
     -DOMNETPP_SAMPLES_ROOT="$OMNETPP_SAMPLES_ROOT" \
     -DINET_ROOT="$INET_ROOT" \

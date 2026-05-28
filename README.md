@@ -16,7 +16,7 @@ Raynet requires (at least) the following third party (open-source) software:
 - **Ray/RLlib**: RayNet supports all traditional RL workflows by exposing a flexible simulation control API `OmnetBindApi`. However, Ray/RLlib is trivially supported and the recommended option for RayNet.
 - **Python Modules:** Critical python modules like TensorFlow and PyTorch support training and evaluation scripts. A `requirements.txt` is provided that lists the essential modules, and `requirements-extra.txt` additionally provides **all** modules used in production of the final year project.
 
-The build can use several local OMNeT++ installs. By default, `build.sh` selects the newest real `~/omnetpp-*` directory and then looks for INET under that install's `samples/inet*` directory. You can override those choices with `OMNETPP_ROOT`, `INET_ROOT`, or the `build.sh` flags documented below.
+The build can use several local OMNeT++ installs. By default, `build.sh` selects the newest real `~/omnetpp-*` directory and then looks for INET under that install's `samples/inet*` directory. You can override those choices with `OMNETPP_ROOT`, `INET_ROOT`, the `build.sh` flags documented below, or a local `.raynet-build.env` file.
 
 ## Important RayNet Directories
 - **src**: contains the binding API and a environment interface inspired by OMNeT++'s `cmdenv`. The contents of this directory collectively make up the simulation wrapper and will be compiled in to the `build` directory.
@@ -59,6 +59,13 @@ If auto-detection picks the wrong install, choose paths explicitly:
 ./build.sh -o ~/omnetpp-6.3.0 -i ~/omnetpp-6.3.0/samples/inet4.5
 ```
 The same paths can be supplied via environment variables such as `OMNETPP_ROOT`, `INET_ROOT`, `TCPPACED_ROOT`, and `CUBIC_ROOT`.
+
+For setups where OMNeT++ is not under `$HOME`, copy `.raynet-build.env.example` to `.raynet-build.env` and put the absolute paths there. `build.sh` sources that file automatically, and `.raynet-build.env` is ignored by git:
+```
+OMNETPP_ROOT=/its/home/av288/harddrive/omnetpp-6.1
+OMNETPP_SAMPLES_ROOT=$OMNETPP_ROOT/samples
+INET_ROOT=$OMNETPP_SAMPLES_ROOT/inet4.5
+```
 
 ### Step 3 - Python environment
 

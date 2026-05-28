@@ -116,7 +116,12 @@ message(MY_LIB_LINK_LIBRARIES_DEBUG IS ${MY_LIB_LINK_LIBRARIES_DEBUG})
 
 add_compile_options(-fpermissive -fno-omit-frame-pointer -fPIC)
 add_compile_definitions(HAVE_SWAPCONTEXT)
-find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development)
+set(Python3_FIND_VIRTUALENV FIRST)
+if(CMAKE_VERSION VERSION_LESS 3.18)
+    find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development)
+else()
+    find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
+endif()
 include_directories(${Python3_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/extern/pybind11/include ${OMNETPP_INCLUDE_DIR} ${OMNETPP_ROOT}/include ${OMNETPP_ROOT}/src ${LIB_PATHS})
 link_directories(${OMNETPP_ROOT}/lib ${INET_MODEL_PATH} ${LIB_PATHS})
 
