@@ -1,5 +1,9 @@
-import sys, os
+import sys
+import os
+import random
 from pathlib import Path
+from collections import deque, defaultdict
+
 
 def _raynet_home_from_here():
     configured = os.environ.get("RAYNET_HOME")
@@ -7,253 +11,252 @@ def _raynet_home_from_here():
         configured_path = Path(configured).expanduser().resolve(strict=False)
         if configured_path.is_dir():
             return str(configured_path)
+
     for parent in Path(__file__).resolve().parents:
         if (parent / "raynet_paths.py").is_file():
             return str(parent)
+
     return os.path.join(os.getenv("HOME", ""), "raynet")
 
-sys.path.insert(0, _raynet_home_from_here())
+
+RAYNET_HOME = _raynet_home_from_here()
+sys.path.insert(0, RAYNET_HOME)
+
 from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
+
 install_numpy_core_aliases()
 install_rllib_checkpoint_compat()
+
 from raynet_paths import materialize_raynet_ini
-from ray.runtime_env import RuntimeEnv
-import gymnasium as gym
-from gymnasium import spaces
+
 import numpy as np
-import math
-from ray.tune.registry import register_env
-from ray.rllib.callbacks.callbacks import RLlibCallback
-import pprint
 import ray
-from ray import tune
-from ray.tune import Tuner
-from ray.air import CheckpointConfig
-import random
-import math
-from ray.rllib.algorithms.ppo.ppo import PPOConfig
-from ray.rllib.algorithms.sac.sac import SACConfig
-from ray.rllib.algorithms.sac.sac import SAC
-import os
-import time
-from random import randint
-from collections import defaultdict, deque
 import torch
+from gymnasium import spaces
+from ray.tune.registry import register_env
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
+from ray.rllib.algorithms.sac.sac import SACConfig
+from ray.rllib.core.columns import Columns
 
-class OmnetGymApiEnv(gym.Env):
-    def __init__(self,env_config):
-        """
-        Initialize the training environment configuration
-        - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
-        - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
-        """
-        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+
+class OmnetGymApiEnv(MultiAgentEnv):
+    def __init__(self, env_config):
+        super().__init__()
+
+        sys.path.insert(0, os.path.join(RAYNET_HOME, "build"))
         from omnetbind import OmnetGymApi
+
         self.runner = OmnetGymApi()
-        
         self.env_config = env_config
-        self.step_count = 0 # just for debugging
-        self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
+        self.stacking = env_config["stacking"]
+        self.obs_size = 7
+        self.random_seed = os.getpid()
         random.seed(self.random_seed)
-        # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
-        self.stacking = self.env_config["stacking"]
 
-        self.has_reset = False
-
-        # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
-
-        # Define the observation space (expected values/types for each observation feature)
-        self.obs_min = np.tile(np.array(
-                     [0,                            # Throughput
-                      0,                            # Pacerate
-                      0,                            # Lossrate
-                      0,                            # number of acks
-                      0,                            # Interval duration
-                      0,                            # srtt
-                      0                             # Delay metric
-                      ], dtype=np.float32), self.stacking)
-        self.obs_max = np.tile(np.array(
-                     [1,                            # Throughput
-                      10,                           # Pacerate
-                      10,                           # Lossrate
-                      10,                           # Number of ACKs
-                      1,                            # Interval duration
-                      1,                            # srtt
-                      1,                            # Delay metric
-                      ], dtype=np.float32), self.stacking)
-        self.observation_space = spaces.Box(
-            low=self.obs_min, 
-            high=self.obs_max, 
-            dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
-        
-        self.num_observations = 7
-        self.obs_history = defaultdict(self._new_obs_history)
-        self.last_obs_by_agent = {}
-        
-    def _new_obs_history(self):
-        return deque(
-            np.zeros(self.stacking * self.num_observations, dtype=np.float32),
-            maxlen=self.stacking * self.num_observations,
+        # Observation bounds
+        single_obs_min = np.array(
+            [
+                0,  # throughput
+                0,  # pacerate
+                0,  # lossrate
+                0,  # ack count
+                0,  # interval duration
+                0,  # srtt
+                0,  # delay metric
+            ],
+            dtype=np.float32,
         )
 
-    def _stack_agent_obs(self, agent_id, agent_obs, reset=False):
-        if reset:
-            self.obs_history[agent_id] = self._new_obs_history()
+        single_obs_max = np.array(
+            [
+                1,
+                10,
+                10,
+                10,
+                1,
+                1,
+                1,
+            ],
+            dtype=np.float32,
+        )
 
-        agent_obs = np.asarray(agent_obs, dtype=np.float32)
-        if reset:
-            for _ in range(self.stacking):
-                self.obs_history[agent_id].extend(agent_obs)
-        self.obs_history[agent_id].extend(agent_obs)
-        return np.asarray(list(self.obs_history[agent_id]), dtype=np.float32)
+        self.obs_min = np.tile(single_obs_min, self.stacking)
+        self.obs_max = np.tile(single_obs_max, self.stacking)
 
-    def _stack_obs_map(self, obs_map, reset=False):
-        stacked = {}
-        for agent_id, agent_obs in obs_map.items():
-            if agent_id == "SIMULATION_END":
-                continue
-            stacked[agent_id] = self._stack_agent_obs(agent_id, agent_obs, reset=reset)
-        self.last_obs_by_agent = stacked
-        return stacked
+        # MultiAgentEnv spaces describe one agent.
+        self.observation_space = spaces.Box(
+            low=self.obs_min,
+            high=self.obs_max,
+            dtype=np.float32,
+        )
 
-    def _coerce_action_map(self, actions):
-        if isinstance(actions, dict):
-            return {
-                agent_id: float(np.asarray(action, dtype=np.float32).reshape(-1)[0])
-                for agent_id, action in actions.items()
-            }
+        self.action_space = spaces.Box(
+            low=-2,
+            high=2,
+            shape=(1,),
+            dtype=np.float32,
+        )
 
-        if len(self.last_obs_by_agent) != 1:
-            raise ValueError(
-                f"Expected an action dict for agents {sorted(self.last_obs_by_agent)}, got a single action."
-            )
+        # Maximum possible agents
+        self.possible_agents = [
+            f"Orca{i}"
+            for i in range(env_config["num_flows_range"][1])
+        ]
 
-        agent_id = next(iter(self.last_obs_by_agent))
-        return {agent_id: float(np.asarray(actions, dtype=np.float32).reshape(-1)[0])}
+        self.agents = []
 
-       
     def reset(self, *, seed=None, options=None):
-        self.obs_history = defaultdict(self._new_obs_history)
-        self.last_obs_by_agent = {}
-        
-        self.runner.initialise(self.env_config["iniPath"], self.env_config["config_section"])
-        
-        
-        obs = self.runner.reset()
-        return self._stack_obs_map(obs, reset=True), {}
+        self.agents = []
+        self.obs_history = defaultdict(
+            lambda: deque(
+                [np.zeros(self.obs_size, dtype=np.float32) for _ in range(self.stacking)],
+                maxlen=self.stacking,
+            )
+        )
+
+        self.runner.initialise(
+            self.env_config["iniPath"],
+            self.env_config["config_section"],
+        )
+        raw_obs = self.runner.reset()
+        obs = {}
+
+        for agent_id, agent_obs in raw_obs.items():
+            if agent_id == "__all__":
+                continue
+            self.agents.append(agent_id)
+            self.obs_history[agent_id].append(np.asarray(agent_obs, dtype=np.float32))
+            stacked_obs = np.concatenate(self.obs_history[agent_id]).astype(np.float32)
+            obs[agent_id] = stacked_obs
+
+        infos = {agent_id: {} for agent_id in obs}
+        print(f"Initial agents: {self.agents}")
+        return obs, infos
 
     def step(self, actions):
-        action = self._coerce_action_map(actions)
-        obs, rewards, terminateds, info_ = self.runner.step(action)
-        if info_['simDone']:
-            self.runner.cleanup()
-            truncateds = {agent_id: True for agent_id in self.last_obs_by_agent}
-            truncateds["__all__"] = True
-            terminateds = dict(terminateds)
-            terminateds["__all__"] = bool(terminateds.get("__all__", False))
-            return {}, rewards, terminateds, truncateds, {}
+        converted_actions = {}
+        for agent_id, action in actions.items():
+            converted_actions[agent_id] = float(np.asarray(action).item())
 
-        return_obs_history = self._stack_obs_map(obs)
-        raw_terminateds = terminateds
-        rewards = {agent_id: float(rewards.get(agent_id, 0.0)) for agent_id in return_obs_history}
-        terminateds = {
-            agent_id: bool(raw_terminateds.get(agent_id, False))
-            for agent_id in return_obs_history
-        }
-        terminateds["__all__"] = bool(raw_terminateds.get("__all__", False))
-        truncateds = {agent_id: False for agent_id in return_obs_history}
-        truncateds["__all__"] = False
-        
+        raw_obs, rewards, terminateds, info_ = self.runner.step(converted_actions)
+
+        print(f"raw_obs:\n{raw_obs}")
+
+        obs = {}
+        for agent_id, agent_obs in raw_obs.items():
+            if agent_id == "__all__":
+                continue
+            self.obs_history[agent_id].append(np.asarray(agent_obs, dtype=np.float32))
+            stacked_obs = np.concatenate(self.obs_history[agent_id]).astype(np.float32)
+            obs[agent_id] = stacked_obs
+
         if terminateds["__all__"]:
-            print(terminateds)
+            print("Episode complete (terminated).")
             self.runner.shutdown()
             self.runner.cleanup()
-        
-        # Debug
-        printFreq = 1
-        if self.step_count % printFreq == -1:
-            print("-")
-            print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
-            print("\tObservations:")
-            debug_agent, debug_obs = next(iter(return_obs_history.items()))
-            print(f"\t\tAgent: {debug_agent}")
-            print(f"\t\tThroughput: {debug_obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tPacing Rate: {debug_obs[1]:.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {debug_obs[2]:.2f}%          \t\t(Normalized, per interval)")
-            print(f"\t\tACKs: {debug_obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
-            print(f"\t\tInterval time: {debug_obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
-            print(f"\t\tSRTT: {debug_obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
-            print(f"\t\tDelay: {debug_obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
-            
-            print(f"\tRewards:")
-            print(f"\t\tREWARD: {rewards.get(debug_agent, 0.0):.5f}                  \t(Raw, per interval)")
-        self.step_count += 1
-        
-        # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        return return_obs_history, rewards, terminateds, truncateds, {}
-        
-# Generates the OmnetGymApiEnv for the calling ray worker
+            truncateds = {agent_id: False for agent_id in obs}
+            truncateds["__all__"] = False
+        elif info_["simDone"]:
+            print("Episode complete (truncated).")
+            self.runner.cleanup()
+            truncateds = {agent_id: True for agent_id in obs}
+            truncateds["__all__"] = True
+        else:
+            truncateds = {agent_id: False for agent_id in obs}
+            truncateds["__all__"] = False
+
+        infos = {agent_id: {} for agent_id in obs}
+
+        return obs, rewards, terminateds, truncateds, infos
+
+
 def omnetgymapienv_creator(env_config):
-    return OmnetGymApiEnv(env_config)  # return an env instance
+    return OmnetGymApiEnv(env_config)
 
-register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
-if __name__ == '__main__':
-    env_name = "Orca-inference"
+if __name__ == "__main__":
+    env_name = "Orca-multi"
     register_env(env_name, omnetgymapienv_creator)
-    
-    load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca"
-    env_config = {"iniPath": materialize_raynet_ini(sys.argv[1]),
-                  "config_section": sys.argv[2] if len(sys.argv) > 2 else "Orca", # Optional argument to specifcy which config.ini section to run. Orca by default.
-                  "stacking": 10}
-    
+    stacking = 10
+
+    env_config = {
+        "iniPath": materialize_raynet_ini(sys.argv[1]),
+        "config_section": (
+            sys.argv[2]
+            if len(sys.argv) > 2
+            else "Orca"
+        ),
+        "stacking": stacking,
+        "bottleneck_bw_range": (5, 20),
+        "minimum_rtt_range": (5, 100),
+        "bottleneck_buffer_range": (25000, 2000000),
+        "max_steps_range": (2000, 2000),
+        "num_flows_range": (2, 5),
+    }
+
+    checkpoint_load_dir = os.path.join(RAYNET_HOME, "_models", "Orca")
+
     ray.init(
         local_mode=True,
         include_dashboard=False,
         ignore_reinit_error=True,
         _temp_dir=f"/tmp/ray_{os.getpid()}",
-        num_cpus=1
+        num_cpus=1,
     )
+
     config = (
-            SACConfig()
-            # .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
-            .env_runners(explore=False) #, rollout_fragment_length=1000
-            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
-            )
-    algo = config.build_algo()
-    
-    # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
-    def betas_tensor_to_float(learner):
-        for param_grp_key in learner._optimizer_parameters.keys():
-            param_grp = param_grp_key.param_groups[0]
-            param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
-    if (load_from_checkpoint):
-        algo.restore(checkpoint_load_dir)
-        #algo.learner_group.foreach_learner(betas_tensor_to_float)
-    
-    # Inference Loop! Only tested for cleanSlate but MUCH faster that .train()
-    steps = 0
-    check_in_freq = 100
+        SACConfig()
+        .environment(
+            env=env_name,
+            env_config=env_config,
+        )
+        .multi_agent(
+            policies={"default_policy"},
+            policy_mapping_fn=lambda agent_id, *args, **kwargs: "default_policy",
+            policies_to_train=[],
+        )
+    )
+
+    algo = config.build()
+    algo.restore(checkpoint_load_dir)
+    print("Checkpoint restored.")
+
+    # Get RLModule directly using the new API stack.
+    module = algo.get_module("default_policy")
     env = OmnetGymApiEnv(env_config)
-    obs_by_agent, _ = env.reset()
-    module = algo.get_module("default_module")
-    while True:
+    obs, infos = env.reset()
+    terminateds = {"__all__": False}
+    total_rewards = defaultdict(float)
+
+    while not terminateds["__all__"]:
         actions = {}
-        for agent_id, obs in obs_by_agent.items():
-            obs_batch = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        for agent_id, agent_obs in obs.items():
+            batch = {
+                Columns.OBS: torch.from_numpy(
+                    np.expand_dims(agent_obs, axis=0)
+                ).float()
+            }
             with torch.no_grad():
-                out = module.forward_inference({"obs": obs_batch})
+                output = module.forward_inference(batch)
+                action_dist_class = module.get_inference_action_dist_cls()
+                action_dist = action_dist_class.from_logits(output["action_dist_inputs"])
+                action = action_dist.to_deterministic().sample()[0]
 
-            actions[agent_id] = module.get_inference_action_dist_cls().from_logits(
-                out["action_dist_inputs"]
-            ).sample()[0].cpu().numpy()
+            if isinstance(action, torch.Tensor):
+                action = action.cpu().numpy()
 
-        obs_by_agent, rewards, terminateds, truncateds, _ = env.step(actions)
+            actions[agent_id] = action
 
-        if steps % check_in_freq == 0:
-            print(f"Step {steps}, rewards={rewards}")
-        steps += 1
-        if terminateds.get("__all__", False) or truncateds.get("__all__", False) or not obs_by_agent:
+        obs, rewards, terminateds, truncateds, infos = env.step(actions)
+        for agent_id, reward in rewards.items():
+            total_rewards[agent_id] += reward
+
+        print(f"Step rewards: {rewards}")
+
+        if truncateds.get("__all__", False):
             break
+
+    print("\nEvaluation complete.")
+
+    for agent_id, reward in total_rewards.items():
+        print(f"{agent_id}: {reward}")
