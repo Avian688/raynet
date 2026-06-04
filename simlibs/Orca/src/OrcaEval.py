@@ -34,9 +34,14 @@ import ray
 import torch
 from gymnasium import spaces
 from ray.tune.registry import register_env
+from ray.tune.logger import NoopLogger
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.algorithms.sac.sac import SACConfig
 from ray.rllib.core.columns import Columns
+
+
+def _noop_logger_creator(config):
+    return NoopLogger(config, os.devnull)
 
 
 class OmnetGymApiEnv(MultiAgentEnv):
@@ -217,7 +222,7 @@ if __name__ == "__main__":
         )
     )
 
-    algo = config.build()
+    algo = config.build_algo(logger_creator=_noop_logger_creator)
     algo.restore(checkpoint_load_dir)
     print("Checkpoint restored.")
 

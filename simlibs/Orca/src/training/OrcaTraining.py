@@ -12,7 +12,8 @@ def _raynet_home_from_here():
             return str(parent)
     return os.path.join(os.getenv("HOME", ""), "raynet")
 
-sys.path.insert(0, _raynet_home_from_here())
+RAYNET_HOME = _raynet_home_from_here()
+sys.path.insert(0, RAYNET_HOME)
 from raynet_numpy_compat import install_numpy_core_aliases, install_rllib_checkpoint_compat
 install_numpy_core_aliases()
 install_rllib_checkpoint_compat()
@@ -28,7 +29,7 @@ import pprint
 import ray
 from ray import tune
 from ray.tune import Tuner
-from ray.air import CheckpointConfig
+from ray.air import CheckpointConfig, RunConfig
 import random
 import math
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
@@ -39,7 +40,15 @@ import time
 from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
+import torch
 from collections import deque
+
+def _raynet_worker_env():
+    pythonpath = os.environ.get("PYTHONPATH")
+    return {
+        "RAYNET_HOME": RAYNET_HOME,
+        "PYTHONPATH": os.pathsep.join(filter(None, [RAYNET_HOME, pythonpath])),
+    }
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -48,7 +57,7 @@ class OmnetGymApiEnv(gym.Env):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
-        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+        sys.path.insert(0, os.path.join(RAYNET_HOME, "build"))
         from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
         
@@ -116,32 +125,35 @@ class OmnetGymApiEnv(gym.Env):
         self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
         self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
         self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
+        self.buffer_packets = max(1, round(self.buffer_size / (1448 * 8)))
         self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
 
         # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
         # print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
-        # print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
+        # print("ORCA_BOTTLENECK_BUFFER_PACKETS: ", self.buffer_packets)
         # print("MAX_RL_STEPS: ", f"{self.max_steps}")
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
-        original_ini_file = self.env_config["iniPath"]
-        ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
-        with open(original_ini_file, 'r') as fin:
+        original_ini_file = Path(self.env_config["iniPath"])
+        ini_variants_dir = original_ini_file.parent / "ini_variants"
+        ini_variants_dir.mkdir(parents=True, exist_ok=True)
+        worker_ini_file = ini_variants_dir / f"{original_ini_file.name}.worker{os.getpid()}"
+        with original_ini_file.open('r') as fin:
             ini_string = fin.read()
         ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
         ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
         ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
+        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_PACKETS", str(self.buffer_packets))
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
-        print(f"SAVING TO {ini_variants_base + f".worker{os.getpid()}"}")
-        with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
+        print(f"SAVING TO {worker_ini_file}")
+        with worker_ini_file.open('w') as fout:
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
+        self.runner.initialise(str(worker_ini_file), "General")
         obs = self.runner.reset()
         # print("Reset obs:")
         # print(obs)
@@ -193,7 +205,7 @@ def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Orca-paperparams-v0"
+    env_name = "Orca-godmode-v0"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -210,10 +222,10 @@ if __name__ == '__main__':
     bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"
+    checkpoint_load_dir = os.path.join(RAYNET_HOME, "_models", "Orca", "checkpoints", "checkpoint_16")
     steps_to_train = 1000000
     
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
+    env_config = {"iniPath": os.path.join(RAYNET_HOME, "simlibs", "Orca", "src", "training", "OrcaTraining.ini"),
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range, 
                   "bottleneck_buffer_range": bottleneck_buffer_range,
@@ -222,15 +234,26 @@ if __name__ == '__main__':
     random.seed(seed)
     np.random.seed(seed)
     gpus = GPUtil.getGPUs()
-    print("GPUs Available:", gpus)
-    ray.init(num_cpus=16, num_gpus=len(gpus))
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    learner_uses_gpu = num_gpus > 0
+    print("GPUs reported by GPUtil:", gpus)
+    print("CUDA GPUs available to PyTorch:", num_gpus)
+    ray.init(
+        num_cpus=16,
+        num_gpus=num_gpus,
+        runtime_env=RuntimeEnv(env_vars=_raynet_worker_env()),
+    )
     config = (
             SACConfig()
-            .resources(num_gpus=len(gpus))
-            .learners(num_learners=1, num_gpus_per_learner=1)
+            .resources(num_gpus=num_gpus)
+            .learners(
+                num_learners=1 if learner_uses_gpu else 0,
+                num_gpus_per_learner=1 if learner_uses_gpu else 0,
+            )
             .env_runners(num_env_runners=num_workers, 
                          num_cpus_per_env_runner=1,
                          num_envs_per_env_runner=1,
+                         sample_timeout_s=None,
                          #rollout_fragment_length=200,
                          explore=True) #, rollout_fragment_length=1000
             .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
@@ -277,7 +300,7 @@ if __name__ == '__main__':
         param_space=config,
         run_config=RunConfig(
             name=env_name,
-            storage_path=os.path.expanduser("~/ray_results"),
+            storage_path=os.path.join(os.path.dirname(RAYNET_HOME), "ray_results"),
 
             stop={
                 "num_env_steps_sampled_lifetime": 1_000_000,

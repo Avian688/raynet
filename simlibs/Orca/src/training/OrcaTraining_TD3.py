@@ -88,6 +88,7 @@ class OmnetGymApiEnv(gym.Env):
         self.buffer_size = round(
             np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1])
         )
+        self.buffer_packets = max(1, round(self.buffer_size / (1448 * 8)))
         self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
 
         original_ini_file = self.env_config["iniPath"]
@@ -103,7 +104,7 @@ class OmnetGymApiEnv(gym.Env):
         ini_string = normalize_raynet_ini_text(ini_string)
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
         ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt / 2.0}ms")
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
+        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_PACKETS", str(self.buffer_packets))
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
 
         print(f"SAVING TO {worker_ini_file}")

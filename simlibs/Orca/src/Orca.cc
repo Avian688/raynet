@@ -1,3 +1,4 @@
+
 #include "RLInterface.h"
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
@@ -10,8 +11,6 @@
 #include "Orca.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
-#include <cctype>
-#include <string>
 
 using namespace inet::tcp;
 using namespace inet;
@@ -20,34 +19,31 @@ using namespace learning;
 Register_Class(Orca); // Lets omnet see and use this class
 
 namespace {
-
-std::string sanitizeAgentId(std::string id)
-{
-    for (char& c : id) {
-        if (!std::isalnum(static_cast<unsigned char>(c))) {
-            c = '_';
+    std::string sanitizeAgentId(std::string id)
+    {
+        for (char& c : id) {
+            if (!std::isalnum(static_cast<unsigned char>(c))) {
+                c = '_';
+            }
         }
+        return id;
     }
-    return id;
-}
 
-std::string makeOrcaAgentId(cComponent *owner)
-{
-    cModule *tcpModule = dynamic_cast<cModule *>(owner);
-    cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
-    int hostIndex = hostModule ? hostModule->getIndex() : -1;
+    std::string makeOrcaAgentId(cComponent *owner)
+    {
+        cModule *tcpModule = dynamic_cast<cModule *>(owner);
+        cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
+        int hostIndex = hostModule ? hostModule->getIndex() : -1;
 
-    if (hostIndex == 0) {
-        return "Orca";
+        if (hostIndex == 0) {
+            return "Orca";
+        }
+        if (hostIndex > 0) {
+            return "Orca" + std::to_string(hostIndex);
+        }
+        return "Orca_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
     }
-    if (hostIndex > 0) {
-        return "Orca" + std::to_string(hostIndex);
-    }
-    return "Orca_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
 }
-
-}
-
 Orca::Orca():
     TcpCubic(), RLInterface() {
     if (debug) cout << "\tOrca: Constructor called!";
@@ -105,18 +101,21 @@ void Orca::established(bool active) {
 
 // Return an observation to the broker, based on the current state
 std::optional<ObsType> Orca::computeObservation(){
-    if (debug) cout << "\tOrca: computeObservation()" << endl; 
+    if (debug) cout << "\t" << stringId << " computeObservation()" << endl; 
     double lastIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
-
+    this->bytesDelivered = dynamic_cast<TcpPacedConnection*>(conn)->getDelivered();
+    this->bytesLost = dynamic_cast<TcpPacedConnection*>(conn)->getTotalDetectedLostBytes();
+    this->delta_bytes_delivered = this->bytesDelivered - this->last_bytes_delivered;    // bytes delivered this interval
+    this->delta_bytes_lost = this->bytesLost - this->last_bytes_lost;                   // bytes lost this interval
+    this->lossRate = this->delta_bytes_lost / lastIntervalDuration;                     // bytes lost per second this interval
     this->delta_snd_max = state->snd_max - this->last_snd_max;
     this->delta_snd_una = state->snd_una - this->last_snd_una;
     this->delta_ack_cnt = state->ack_cnt - this->last_ack_cnt;
-    
     // Initialize empty obs to populate as we go
     double obs[7] = {0,0,0,0,0,0,};
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
-    this->orcaThroughput = this->bytesDelivered / lastIntervalDuration;
+    this->orcaThroughput = this->delta_bytes_delivered / lastIntervalDuration;
     this->orcaMaxThroughput = std::max(this->orcaMaxThroughput, this->orcaThroughput);
     if (this->orcaMaxThroughput == 0.0) {
         obs[0] = obs[1] = obs[2] = 0.0;
@@ -128,17 +127,13 @@ std::optional<ObsType> Orca::computeObservation(){
         double paceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
         obs[1] = std::min(10.0, paceRate / this->orcaMaxThroughput);
 
-        // Lossrate: What percentage of bytes sent this interval were retransmissions
-        this->orcaLossRate = 0.0;
-        if (this->retransmissionRate > 0.0) {  // Avoid division by 0
-            double transmissionRate = delta_snd_max/lastIntervalDuration; // How many non-retransmits occurred this interval in bytes/s
-            this->orcaLossRate = this->retransmissionRate / (this->retransmissionRate + transmissionRate); // What percentage of interval's sent data was retransmissions
-        }
-        obs[2] = this->retransmissionRate / this->orcaMaxThroughput;
+        // Lossrate: What percentage of bytes sent this interval were lost
+        obs[2] = this->lossCoefficient * this->lossRate / this->orcaMaxThroughput;
+       
     }
 
     // ACKed: How many bytes were ACKed this interval
-    this->orcaACKTotal= this->bytesDelivered/(double)state->snd_mss;
+    this->orcaACKTotal= this->delta_bytes_delivered/(double)state->snd_mss;
     obs[3] = this->orcaACKTotal /  state->snd_cwnd;
     
     // Interval Duration: How many seconds passed since last interval
@@ -169,7 +164,7 @@ std::optional<ObsType> Orca::computeObservation(){
     } else {
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());
     }
-    
+
     // Debug prints
     if(debug) {
         cout << "-" << endl;
@@ -183,8 +178,12 @@ std::optional<ObsType> Orca::computeObservation(){
             cout << "\t\tack_cnt: " << state->ack_cnt << endl;
             cout << "\t\tdelta_ack_cnt: " << this->delta_ack_cnt << endl;
             cout << "\t\tACKTotal: " << this->orcaACKTotal << endl;
-            cout << "\t\tpacketsDelivered" << this->bytesDelivered/state->snd_mss << endl;
+            cout << "\t\tpacketsDelivered: " << this->delta_bytes_delivered/state->snd_mss << endl;
             cout << "\t\trttReportCount: " << this->rttReportCount << endl;
+            cout << "\t\tbytesLost: " << this->bytesLost << endl;
+            cout << "\t\tbytesDelivered: " << this->bytesDelivered << endl;
+            cout << "\t\tdelta_bytes_lost: " << this->delta_bytes_lost << endl;
+            cout << "\t\tdelta_bytes_delivered: " << this->delta_bytes_delivered << endl;
             cout << "\t\tDone: " << done << endl;
         cout << "\tObservations:" << endl;
             cout << "\t\tThroughput: " << obs[0] << endl;
@@ -199,6 +198,15 @@ std::optional<ObsType> Orca::computeObservation(){
     // Plotting metrics
     owner->emit(throughputSignal, this->orcaThroughput);
 
+    // cout << "---" << endl;
+    // cout << "\n" << stringId << " Throughput: " << this->orcaThroughput << endl;
+    // cout << stringId << " delta_bytes_lost: " << this->delta_bytes_lost << endl;
+    // cout << stringId << " currentLossPercentage: " << this->lossRate/this->orcaMaxThroughput << endl;
+    // cout << stringId << " lossObs: " << obs[2] << endl;
+    
+    // cout << "\n"<< stringId << " bytesLost: " << this->bytesLost << endl;
+    // cout << stringId << " totalLossPercentage: " << this->bytesLost/this->bytesDelivered << endl;
+
     return ObsType({
             obs[0],                   // Normalized throughput
             obs[1],               // Normalized pacerate
@@ -211,12 +219,12 @@ std::optional<ObsType> Orca::computeObservation(){
 }
 
 RewardType Orca::computeReward(){
-    if (debug) cout << "\tOrca: computeReward()" << endl;
+    if (debug) cout << "\t" << stringId << " computeReward()" << endl;
     double reward;
     if (this->orcaMaxThroughput == 0.0) {
         reward = 0.0;
     } else {
-        reward = (this->orcaThroughput-(this->lossCoefficient*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric;
+        reward = (this->orcaThroughput-(this->lossCoefficient*this->lossRate))/this->orcaMaxThroughput*this->orcaDelayMetric;
     }
     if (debug) cout << "\t\tReward: " << reward << endl;
     return(reward);
@@ -224,9 +232,7 @@ RewardType Orca::computeReward(){
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Orca::decisionMade(ActionType action) {
-    if (debug) cout << "\tOrca: decisionMade()" << endl;
-
-    std::cout << "\n ACTION: " << stringId << endl;
+    if (debug) cout << "\t" << stringId << " decisionMade()" << endl;
 
     // Compute new cwnd from the given action (cwnd *= 2^action)
     double multiplier = std::pow(2.0, (double) action);
@@ -234,7 +240,7 @@ void Orca::decisionMade(ActionType action) {
     newCwnd = max(newCwnd, state->snd_mss);
     
     // Attempt to change cwnd and pacing rate
-    if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
+    if (this->takeActions && this->rttReportCount > 0 && newCwnd < 1000000) { // Only take the action if we have valid RTT data to inform it, and if the new cwnd is a reasonable value (not insanely high due to a bug or something)
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
@@ -259,43 +265,43 @@ void Orca::decisionMade(ActionType action) {
         } 
     }
 
-    if (debug) {
-        cout << "\t\t" << (this->takeActions) << endl;
-        cout << "\t\t" << (this->rttReportCount > 0) << endl;
-        cout << "\t\t" << (newCwnd < 1000000) << endl;
-        cout << "-" << endl;
-    }
+    // if (debug) {
+    //     cout << "\t\t" << (this->takeActions) << endl;
+    //     cout << "\t\t" << (this->rttReportCount > 0) << endl;
+    //     cout << "\t\t" << (newCwnd < 1000000) << endl;
+    //     cout << "-" << endl;
+    // }
 }
 
 
 void Orca::resetStepVariables()
 {
-    if (debug) cout << "\t\tOrca: resetStepVariables()" << endl;
+    if (debug) cout << "\t\t" << stringId << " resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     this->orcaDelaySum=0.0;      // Sum of all RTT reports received over an interval 
     this->orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    this->bytesDelivered=0.0;
     this->rttReportCount=0; // The number of RTT values we have measured over the last interval
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->last_ack_cnt = state->ack_cnt;
+    this->last_bytes_lost = this->bytesLost;
+    this->last_bytes_delivered = this->bytesDelivered;  
     this->lastIntervalTime = simTime();
 }
 
 // RayNet method: Called after simulation completion? Unsure how this differs from reset()
 void Orca::cleanup()
 {
-    if (debug) cout << "\tOrca: cleanUp()" << endl;
+    if (debug) cout << "\t" << stringId << " cleanUp()" << endl;
 }
 
 ObsType Orca::getRLState(){
-    if (debug) cout << "\tOrca: getRLState()" << endl;
+    if (debug) cout << "\t" << stringId << " getRLState()" << endl;
     // Deprecated, remove this later
 }
 
 RewardType Orca::getReward(){
-    if (debug) cout << "\tOrca: getReward()" << endl;
+    if (debug) cout << "\t" << stringId << " getReward()" << endl;
     // Deprecated, remove this later
 }
 
@@ -324,5 +330,6 @@ void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
 // Override to track bytes delivered
 void Orca::receivedDataAck(uint32_t firstSeqAcked) {
     TcpCubic::receivedDataAck(firstSeqAcked);
-    this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
+    
+    // this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
 }

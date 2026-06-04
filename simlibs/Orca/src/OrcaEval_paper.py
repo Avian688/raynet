@@ -38,9 +38,15 @@ import os
 import time
 from random import randint
 from ray.tune.analysis import ExperimentAnalysis
+from ray.tune.logger import NoopLogger
 import GPUtil
 from collections import deque
 import torch
+
+
+def _noop_logger_creator(config):
+    return NoopLogger(config, os.devnull)
+
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -183,7 +189,7 @@ if __name__ == '__main__':
             .env_runners(explore=False) #, rollout_fragment_length=1000
             .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
             )
-    algo = config.build_algo()
+    algo = config.build_algo(logger_creator=_noop_logger_creator)
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):
